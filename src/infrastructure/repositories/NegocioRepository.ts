@@ -1,17 +1,17 @@
 import { api, apiPublic } from "../http/api";
 import type { INegocioRepository }
   from "../../domain/repositories/INegocioRepository";
-import { CreateNegocioDto } from "@/application/dtos/negocio/CreateNegocioDto";
 import { ServiceResponse } from "@/shared/types/service-response";
 import { NegocioDto } from "@/application/dtos/NegocioDto";
 import { PagedResult } from "@/shared/types/PagedResult";
+import { CreateUpdateNegocioDto } from "@/application/dtos/negocio/CreateUpdateNegocioDto";
 
 export class NegocioRepository implements INegocioRepository {
   private base = "/Negocio";
 
-  async create(dto: CreateNegocioDto): Promise<ServiceResponse<CreateNegocioDto>> {
-    const { data } = await apiPublic.post<ServiceResponse<CreateNegocioDto>>(
-      `${this.base}/CreateNegocio`,
+  async createOrUpdate(dto: CreateUpdateNegocioDto): Promise<ServiceResponse<CreateUpdateNegocioDto>> {
+    const { data } = await apiPublic.post<ServiceResponse<CreateUpdateNegocioDto>>(
+      `${this.base}/CreateUpdateNegocio`,
       dto
     );
     return data;

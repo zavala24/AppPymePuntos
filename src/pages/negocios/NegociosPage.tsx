@@ -9,12 +9,13 @@ import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Close";
 import ShieldIcon from "@mui/icons-material/Security";
 import CheckIcon from "@mui/icons-material/CheckCircle";
+import CloseIcon from "@mui/icons-material/HighlightOff"; // para cancelar edición
 
 import { NegocioRepository } from "../../infrastructure/repositories/NegocioRepository";
 import { NegocioService } from "../../application/services/NegocioService";
 import type { INegocioService } from "../../application/services/INegocioService";
-import type { CreateNegocioDto } from "@/application/dtos/negocio/CreateNegocioDto";
-import { NegocioDto } from "@/application/dtos/NegocioDto";
+import type { NegocioDto } from "@/application/dtos/NegocioDto";
+import { CreateUpdateNegocioDto } from "@/application/dtos/negocio/CreateUpdateNegocioDto";
 
 const negocioService: INegocioService = new NegocioService(new NegocioRepository());
 
@@ -40,6 +41,10 @@ export default function NegociosPage() {
     categoria: "",
     activo: true,
   });
+
+  // id que estamos editando (null => modo crear)
+  const [editingId, setEditingId] = React.useState<number | null>(null);
+  const isEditing = editingId != null && editingId > 0;
 
   // ------- Grid / Datos -------
   const [rows, setRows] = React.useState<NegocioRow[]>([]);
@@ -97,33 +102,39 @@ export default function NegociosPage() {
     }
   }, [paginationModel, search]);
 
-  // 🔁 Debounce de búsqueda
   React.useEffect(() => {
-    const delay = setTimeout(() => {
-      loadPage();
-    }, 600);
+    const delay = setTimeout(() => loadPage(), 600);
     return () => clearTimeout(delay);
   }, [search, loadPage]);
 
-  // 🔁 Cargar al montar o cambiar de página
   React.useEffect(() => {
     loadPage();
-  }, [paginationModel]);
+  }, [paginationModel.page, paginationModel.pageSize]);
 
   // ------- Acciones -------
-  const onNuevo = () =>
+  const clearForm = () =>
     setForm({ nombre: "", facebook: "", instagram: "", sitio: "", direccion: "", categoria: "", activo: true });
 
-  const onCancelar = () => onNuevo();
+  const onNuevo = () => {
+    setEditingId(null);
+    clearForm();
+  };
+
+  const onCancelarEdicion = () => {
+    setEditingId(null);
+    clearForm();
+  };
 
   const [saving, setSaving] = React.useState(false);
+
   const onGuardar = async () => {
     if (!form.nombre.trim()) {
       showToast("El nombre es obligatorio.", "error");
       return;
     }
 
-    const dto: CreateNegocioDto = {
+    const dto: CreateUpdateNegocioDto = {
+      idNegocio: editingId ?? 0,               // 👈 clave para que el back sepa si es create o update
       nombre: form.nombre.trim(),
       categoria: form.categoria || null,
       facebook: form.facebook || null,
@@ -135,15 +146,16 @@ export default function NegociosPage() {
 
     try {
       setSaving(true);
-      const resp = await negocioService.create(dto);
+      const resp = await negocioService.createOrUpdate(dto);   // 👈 nuevo servicio
 
-      if (resp.status === 201) {
-        showToast(resp.message || "Negocio creado con éxito.", "success");
-        onNuevo();
+      if (resp.status === 200 || resp.status === 201) {
+        showToast(resp.message || (isEditing ? "Negocio actualizado." : "Negocio creado."), "success");
+        setEditingId(null);
+        clearForm();
         setPaginationModel((m) => ({ ...m, page: 0 }));
         await loadPage();
       } else {
-        showToast(resp.message || "No se pudo crear el negocio.", "error");
+        showToast(resp.message || "No se pudo guardar el negocio.", "error");
       }
     } catch (e: any) {
       showToast(e?.message ?? "Error de red.", "error");
@@ -152,7 +164,24 @@ export default function NegociosPage() {
     }
   };
 
-  // ------- Columnas del grid -------
+  // Al hacer click en una fila, cargamos el form y entramos a modo edición
+  const onRowClick = (params: any) => {
+    const r = params.row as NegocioRow;
+    setEditingId(r.id);
+    setForm({
+      nombre: r.nombre,
+      facebook: r.facebook ?? "",
+      instagram: r.instagram ?? "",
+      sitio: r.sitio ?? "",
+      direccion: r.direccion ?? "",
+      categoria: r.categoria ?? "",
+      activo: !!r.activo,
+    });
+    // (opcional) scroll al formulario
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // ------- Columnas -------
   const columns: GridColDef<NegocioRow>[] = [
     {
       field: "nombre",
@@ -161,6 +190,7 @@ export default function NegociosPage() {
       renderCell: (p) => (
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography fontWeight={600}>{p.value as string}</Typography>
+          {p.row.activo && <CheckIcon fontSize="small" color="success" />}
         </Stack>
       ),
     },
@@ -170,20 +200,21 @@ export default function NegociosPage() {
     { field: "sitio", headerName: "Sitio web", flex: 0.9 },
     { field: "direccion", headerName: "Dirección", flex: 1.2 },
     {
-  field: "activo",
-  headerName: "Activo",
-  width: 110,
-  align: "center",
-  renderCell: (p) =>
-    p.value ? (
-      <CheckIcon color="success" fontSize="small" />
-    ) : (
-      <CancelIcon color="error" fontSize="small" />
-    ),
-}
+      field: "activo",
+      headerName: "Activo",
+      width: 110,
+      align: "center",
+      headerAlign: "center",
+      renderCell: (p) =>
+        p.value ? (
+          <CheckIcon color="success" fontSize="small" />
+        ) : (
+          <CancelIcon color="error" fontSize="small" />
+        ),
+    },
   ];
 
-  // 🧮 Altura dinámica (ajusta filas visibles)
+  // altura dinámica
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
   return (
@@ -196,62 +227,48 @@ export default function NegociosPage() {
 
       {/* Formulario */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, mb: 3 }}>
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField
-            fullWidth
-            label="Nombre *"
-            value={form.nombre}
-            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
-          />
-          <TextField
-            fullWidth
-            label="Facebook"
-            value={form.facebook}
-            onChange={(e) => setForm((f) => ({ ...f, facebook: e.target.value }))}
-          />
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Typography variant="h6" fontWeight={700}>
+            {isEditing ? "Editar negocio" : "Nuevo negocio"}
+          </Typography>
         </Stack>
 
         <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField
-            fullWidth
-            label="Instagram"
-            value={form.instagram}
-            onChange={(e) => setForm((f) => ({ ...f, instagram: e.target.value }))}
-          />
-          <TextField
-            fullWidth
-            label="Sitio web"
-            value={form.sitio}
-            onChange={(e) => setForm((f) => ({ ...f, sitio: e.target.value }))}
-          />
+          <TextField fullWidth label="Nombre *" value={form.nombre}
+            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} />
+          <TextField fullWidth label="Facebook" value={form.facebook}
+            onChange={(e) => setForm((f) => ({ ...f, facebook: e.target.value }))} />
         </Stack>
 
-        <TextField
-          fullWidth
-          label="Categoría"
-          value={form.categoria}
-          onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}
-          sx={{ mb: 2 }}
-        />
-        <TextField
-          fullWidth
-          multiline
-          minRows={3}
-          label="Dirección"
-          value={form.direccion}
-          onChange={(e) => setForm((f) => ({ ...f, direccion: e.target.value }))}
-          sx={{ mb: 2 }}
-        />
+        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
+          <TextField fullWidth label="Instagram" value={form.instagram}
+            onChange={(e) => setForm((f) => ({ ...f, instagram: e.target.value }))} />
+          <TextField fullWidth label="Sitio web" value={form.sitio}
+            onChange={(e) => setForm((f) => ({ ...f, sitio: e.target.value }))} />
+        </Stack>
+
+        <TextField fullWidth label="Categoría" value={form.categoria}
+          onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))} sx={{ mb: 2 }} />
+
+        <TextField fullWidth multiline minRows={3} label="Dirección" value={form.direccion}
+          onChange={(e) => setForm((f) => ({ ...f, direccion: e.target.value }))} sx={{ mb: 2 }} />
+
         <FormControlLabel
           control={<Switch checked={form.activo} onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))} />}
           label="Activo"
         />
 
         <Stack direction="row" justifyContent="flex-end" gap={1}>
-          <Button startIcon={<AddIcon />} variant="outlined" color="primary" onClick={onNuevo}>Nuevo</Button>
-          <Button startIcon={<CancelIcon />} variant="outlined" color="error" onClick={onCancelar}>Cancelar</Button>
+          <Button startIcon={<AddIcon />} variant="outlined" color="primary" onClick={onNuevo}>
+            Nuevo
+          </Button>
+          {isEditing && (
+            <Button startIcon={<CancelIcon />} variant="outlined" color="warning" onClick={onCancelarEdicion}>
+              Cancelar edición
+            </Button>
+          )}
           <Button startIcon={<SaveIcon />} variant="contained" color="success" onClick={onGuardar} disabled={saving}>
-            {saving ? "Guardando..." : "Guardar"}
+            {saving ? (isEditing ? "Actualizando..." : "Guardando...") : (isEditing ? "Actualizar" : "Guardar")}
           </Button>
         </Stack>
       </Paper>
@@ -277,48 +294,27 @@ export default function NegociosPage() {
           }}
         />
 
-        {/* Grid con altura dinámica */}
         <Box sx={{ height: dynamicHeight, width: "100%" }}>
           <DataGrid
             rows={rows}
             columns={columns}
             getRowId={(r) => r.id}
             loading={loading}
-            disableRowSelectionOnClick
+            disableRowSelectionOnClick   // evita checkbox, pero onRowClick funciona
+            onRowClick={onRowClick}      // 👈 selecciona para editar
             paginationMode="server"
             rowCount={rowCount}
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[5, 10, 20, 50]}
-            getRowClassName={(p) =>
-              p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd"
-            }
-            slots={{
-              noRowsOverlay: () => (
-                <Stack height="100%" alignItems="center" justifyContent="center">
-                  <Typography color="text.secondary">Sin datos</Typography>
-                </Stack>
-              ),
-              loadingOverlay: () => (
-                <Stack height="100%" alignItems="center" justifyContent="center">
-                  <Typography variant="body2" color="text.secondary">Cargando...</Typography>
-                </Stack>
-              ),
-            }}
+            getRowClassName={(p) => (p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd")}
             sx={{
               borderRadius: 3,
-              "& .MuiDataGrid-columnHeaders": {
-                backgroundColor: "action.hover",
-                fontWeight: 700,
-              },
+              "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
               "& .row-even": { backgroundColor: "#ffffff" },
               "& .row-odd": { backgroundColor: "rgba(14,165,233,0.06)" },
-              "& .MuiDataGrid-row:hover": {
-                backgroundColor: "rgba(14,165,233,0.12) !important",
-              },
-              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
-                outline: "none",
-              },
+              "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.12) !important" },
+              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
             }}
           />
         </Box>

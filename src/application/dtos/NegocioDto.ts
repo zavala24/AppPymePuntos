@@ -1,5 +1,5 @@
 export interface NegocioDto {
-  idNegocio: number;
+  idNegocio?: number;
   nombre: string;
   categoria?: string | null;
   facebook?: string | null;

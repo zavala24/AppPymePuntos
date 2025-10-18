@@ -1,4 +1,5 @@
-export interface CreateNegocioDto {
+export interface CreateUpdateNegocioDto {
+  idNegocio?: number | null;
   nombre: string;
   categoria?: string | null;
   facebook?: string | null;
