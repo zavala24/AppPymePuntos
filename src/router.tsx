@@ -1,6 +1,4 @@
-// src/router.tsx
 import { createBrowserRouter, Navigate } from 'react-router-dom';
-
 import AppLayout from './shared/layout/AppLayout';
 
 // Páginas
@@ -9,13 +7,14 @@ import DashboardPage from './pages/dashboard/DashboardPage';
 import NegociosPage from './pages/negocios/NegociosPage';
 import UsuariosPage from './pages/usuarios/UsuariosPage';
 import NotificacionesPage from './pages/notificaciones/NotificacionesPage';
-import ConfigPage from './pages/config/ConfigPage';
+
+// Configuración
+import ConfigNegocioPage from './pages/configuracion/negocio/ConfigNegocioPage';
+import ConfigUsuariosAdminPage from './pages/configuracion/usuarios/ConfigUsuariosAdminPage';
 
 const router = createBrowserRouter([
-  // Ruta de login separada del layout
   { path: '/login', element: <LoginPage /> },
 
-  // Rutas con layout
   {
     path: '/',
     element: <AppLayout />,
@@ -25,11 +24,18 @@ const router = createBrowserRouter([
       { path: 'negocios', element: <NegociosPage /> },
       { path: 'usuarios', element: <UsuariosPage /> },
       { path: 'notificaciones', element: <NotificacionesPage /> },
-      { path: 'config', element: <ConfigPage /> },
+
+      {
+        path: 'configuracion',
+        children: [
+          { index: true, element: <Navigate to="/configuracion/negocio" replace /> },
+          { path: 'negocio', element: <ConfigNegocioPage /> },
+          { path: 'usuarios', element: <ConfigUsuariosAdminPage /> }, // 👈 NUEVO
+        ],
+      },
     ],
   },
 
-  // Catch-all
   { path: '*', element: <Navigate to="/" replace /> },
 ]);
 
