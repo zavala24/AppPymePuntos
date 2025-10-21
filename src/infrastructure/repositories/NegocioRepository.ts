@@ -10,7 +10,7 @@ export class NegocioRepository implements INegocioRepository {
   private base = "/Negocio";
 
   async createOrUpdate(dto: CreateUpdateNegocioDto): Promise<ServiceResponse<CreateUpdateNegocioDto>> {
-    const { data } = await apiPublic.post<ServiceResponse<CreateUpdateNegocioDto>>(
+    const { data } = await api.post<ServiceResponse<CreateUpdateNegocioDto>>(
       `${this.base}/CreateUpdateNegocio`,
       dto
     );
@@ -23,7 +23,7 @@ export class NegocioRepository implements INegocioRepository {
     search?: string | null,
     category?: string | null
   ): Promise<ServiceResponse<PagedResult<NegocioDto>>> {
-    const { data } = await apiPublic.get<ServiceResponse<PagedResult<NegocioDto>>>(
+    const { data } = await api.get<ServiceResponse<PagedResult<NegocioDto>>>(
       `${this.base}/GetNegociosPaged`,
       { params: { page, pageSize, search, category } }
     );
