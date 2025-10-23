@@ -330,17 +330,16 @@ export default function ConfigNegocioPage() {
             </Box>
 
             {/* URL Logo */}
-            <Box sx={{ gridColumn: { xs: "1 / -1", md: "1 / 3" } }}>
-              <TextField
-                fullWidth
-                label="URL del logo"
-                value={form.logoUrl}
-                InputProps={{
-                  readOnly: true,
-                  sx: { bgcolor: "#f9fafb", cursor: "not-allowed" },
-                }}
-              />
-            </Box>
+<Box sx={{ gridColumn: { xs: "1 / -1", md: "1 / 3" } }}>
+  <TextField
+    fullWidth
+    label="URL del logo"
+    type="url"
+    value={form.logoUrl}
+    onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
+    placeholder="https://.../logo.png"
+  />
+</Box>
 
             {/* Preview logo */}
 <Box

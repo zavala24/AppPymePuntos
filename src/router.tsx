@@ -11,12 +11,11 @@ import UsuariosPage from "./pages/usuarios/UsuariosPage";
 import NotificacionesPage from "./pages/notificaciones/NotificacionesPage";
 import ConfigNegocioPage from "./pages/configuracion/negocio/ConfigNegocioPage";
 import ConfigUsuariosAdminPage from "./pages/configuracion/usuarios/ConfigUsuariosAdminPage";
+import RequireRole from "./shared/router/RequireRole";
 
 const router = createBrowserRouter([
-  // 🔓 Rutas públicas (sin protección)
   { path: "/login", element: <LoginPage /> },
 
-  // 🔐 Rutas protegidas
   {
     path: "/",
     element: (
@@ -27,23 +26,48 @@ const router = createBrowserRouter([
     children: [
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: "dashboard", element: <DashboardPage /> },
-      { path: "negocios", element: <NegociosPage /> },
+
+      // 👇 Solo SUPERADMIN
+      {
+        path: "negocios",
+        element: (
+          <RequireRole allow={["SuperAdmin"]}>
+            <NegociosPage />
+          </RequireRole>
+        ),
+      },
+
       { path: "usuarios", element: <UsuariosPage /> },
       { path: "notificaciones", element: <NotificacionesPage /> },
 
-      // ⚙️ Configuración (subrutas)
       {
         path: "configuracion",
         children: [
-          { index: true, element: <Navigate to="/configuracion/negocio" replace /> },
-          { path: "negocio", element: <ConfigNegocioPage /> },
-          { path: "usuarios", element: <ConfigUsuariosAdminPage /> },
+          {
+            index: true,
+            element: <Navigate to="/configuracion/negocio" replace />,
+          },
+          {
+            path: "negocio",
+            element: (
+              <RequireRole allow={["SuperAdmin"]}>
+                <ConfigNegocioPage />
+              </RequireRole>
+            ),
+          },
+          {
+            path: "usuarios",
+            element: (
+              <RequireRole allow={["SuperAdmin"]}>
+                <ConfigUsuariosAdminPage />
+              </RequireRole>
+            ),
+          },
         ],
       },
     ],
   },
 
-  // 🧭 Cualquier otra ruta redirige al dashboard
   { path: "*", element: <Navigate to="/dashboard" replace /> },
 ]);
 

@@ -1,4 +1,3 @@
-// src/shared/layout/AppLayout.tsx
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   AppBar,
@@ -31,32 +30,20 @@ import { useAuth } from "@/shared/auth/AuthContext";
 
 const drawerWidth = 240;
 
-const primaryLinks = [
-  { to: "/dashboard", label: "Dashboard", icon: <DashboardIcon /> },
-  { to: "/negocios", label: "Negocios", icon: <StoreIcon /> },
-  { to: "/usuarios", label: "Usuarios", icon: <PeopleIcon /> },
-  { to: "/notificaciones", label: "Notificaciones", icon: <NotificationsIcon /> },
-];
-
-/** Intenta obtener un nombre de usuario amigable:
- *  1) de localStorage si existe (username/usuario/usuarioNombre/user)
- *  2) decodificando el JWT (unique_name, name, sub)
- */
+/** Intenta obtener un nombre de usuario amigable */
 function useDisplayName(token?: string | null) {
   return useMemo(() => {
     const lsUser =
       localStorage.getItem("username") ||
       localStorage.getItem("usuario") ||
       localStorage.getItem("usuarioNombre") ||
-      localStorage.getItem("user");
+      localStorage.getItem("pa_user");
 
     if (lsUser && lsUser.trim()) return lsUser;
 
     if (token) {
       try {
         const payload = JSON.parse(atob(token.split(".")[1] || ""));
-        // en tu token pusimos UniqueName con el nombre;
-        // si algún día agregas el login, cámbialo aquí.
         return (
           payload?.unique_name ||
           payload?.name ||
@@ -75,8 +62,8 @@ function useDisplayName(token?: string | null) {
 function initials(text: string) {
   const parts = text.trim().split(/\s+/);
   const first = parts[0]?.[0] ?? "";
-  const last = parts[parts.length - 1]?.[0] ?? "";
-  return (first + last).toUpperCase();
+  const second = parts[0]?.[1] ?? "";
+  return (first + second).toUpperCase();
 }
 
 export default function AppLayout() {
@@ -84,11 +71,14 @@ export default function AppLayout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
 
-  // auth
   const { token, logout } = useAuth();
   const displayName = useDisplayName(token);
 
-  // submenú de configuración
+  // 🟣 Rol desde localStorage
+  const role = (localStorage.getItem("pa_role") || "").trim().toLowerCase();
+  const isSuperAdmin = role === "superadmin";
+
+  // Submenú de configuración
   const [openConfig, setOpenConfig] = useState(pathname.startsWith("/configuracion"));
   useEffect(() => {
     setOpenConfig(pathname.startsWith("/configuracion"));
@@ -99,9 +89,27 @@ export default function AppLayout() {
     navigate("/login", { replace: true });
   };
 
+  // 🔹 Links principales (Negocios solo SuperAdmin)
+  const primaryLinks = [
+    { to: "/dashboard", label: "Dashboard", icon: <DashboardIcon /> },
+    ...(isSuperAdmin ? [{ to: "/negocios", label: "Negocios", icon: <StoreIcon /> }] : []),
+    { to: "/usuarios", label: "Usuarios", icon: <PeopleIcon /> },
+    { to: "/notificaciones", label: "Notificaciones", icon: <NotificationsIcon /> },
+  ];
+
+  // 🔹 Submenú de configuración (solo SuperAdmin ve estos)
+  const configItems = isSuperAdmin
+    ? [
+        { to: "/configuracion/negocio", label: "Negocio", icon: <StoreIcon /> },
+        { to: "/configuracion/usuarios", label: "Usuarios", icon: <PeopleIcon /> },
+      ]
+    : [];
+
+  const hasConfigChildren = configItems.length > 0;
+
   return (
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
-      {/* TOP BAR */}
+      {/* ======= TOP BAR ======= */}
       <AppBar position="fixed" color="primary" sx={{ zIndex: 1201 }}>
         <Toolbar>
           <IconButton color="inherit" edge="start" onClick={() => setOpenDrawer(!openDrawer)} sx={{ mr: 2 }}>
@@ -126,7 +134,7 @@ export default function AppLayout() {
         </Toolbar>
       </AppBar>
 
-      {/* DRAWER */}
+      {/* ======= DRAWER ======= */}
       <Drawer
         variant="persistent"
         open={openDrawer}
@@ -143,6 +151,7 @@ export default function AppLayout() {
         <Toolbar />
         <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
           <List sx={{ px: 1 }}>
+            {/* === LINKS PRINCIPALES === */}
             {primaryLinks.map((l) => (
               <ListItemButton
                 key={l.to}
@@ -156,9 +165,9 @@ export default function AppLayout() {
               </ListItemButton>
             ))}
 
-            {/* ===== Configuración ===== */}
+            {/* === CONFIGURACIÓN === */}
             <ListItemButton
-              onClick={() => setOpenConfig((o) => !o)}
+              onClick={() => hasConfigChildren && setOpenConfig((o) => !o)}
               selected={pathname.startsWith("/configuracion")}
               sx={{ borderRadius: 2, mt: 0.5 }}
             >
@@ -166,42 +175,34 @@ export default function AppLayout() {
                 <SettingsIcon />
               </ListItemIcon>
               <ListItemText primary="Configuración" />
-              {openConfig ? <ExpandLess /> : <ExpandMore />}
+              {hasConfigChildren ? (openConfig ? <ExpandLess /> : <ExpandMore />) : null}
             </ListItemButton>
 
-            <Collapse in={openConfig} timeout="auto" unmountOnExit>
-              <List component="div" disablePadding sx={{ pl: 4, pr: 1, pt: 0.5 }}>
-                <ListItemButton
-                  component={NavLink}
-                  to="/configuracion/negocio"
-                  selected={pathname.startsWith("/configuracion/negocio")}
-                  sx={{ borderRadius: 2, mb: 0.5 }}
-                >
-                  <ListItemIcon>
-                    <StoreIcon />
-                  </ListItemIcon>
-                  <ListItemText primary="Negocio" />
-                </ListItemButton>
-
-                <ListItemButton
-                  component={NavLink}
-                  to="/configuracion/usuarios"
-                  selected={pathname.startsWith("/configuracion/usuarios")}
-                  sx={{ borderRadius: 2 }}
-                >
-                  <ListItemIcon>
-                    <PeopleIcon />
-                  </ListItemIcon>
-                  <ListItemText primary="Usuarios" />
-                </ListItemButton>
-              </List>
-            </Collapse>
+            {/* Submenú (solo SuperAdmin) */}
+            {hasConfigChildren && (
+              <Collapse in={openConfig} timeout="auto" unmountOnExit>
+                <List component="div" disablePadding sx={{ pl: 4, pr: 1, pt: 0.5 }}>
+                  {configItems.map((c) => (
+                    <ListItemButton
+                      key={c.to}
+                      component={NavLink}
+                      to={c.to}
+                      selected={pathname.startsWith(c.to)}
+                      sx={{ borderRadius: 2, mb: 0.5 }}
+                    >
+                      <ListItemIcon>{c.icon}</ListItemIcon>
+                      <ListItemText primary={c.label} />
+                    </ListItemButton>
+                  ))}
+                </List>
+              </Collapse>
+            )}
           </List>
 
           {/* Spacer para empujar el botón al fondo */}
           <Box sx={{ flexGrow: 1 }} />
 
-          {/* Cerrar sesión */}
+          {/* === CERRAR SESIÓN === */}
           <Box sx={{ p: 1, borderTop: (t) => `1px solid ${t.palette.divider}` }}>
             <ListItemButton
               onClick={onLogout}
@@ -220,7 +221,7 @@ export default function AppLayout() {
         </Box>
       </Drawer>
 
-      {/* CONTENIDO */}
+      {/* ======= CONTENIDO ======= */}
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
         <div className="max-w-7xl mx-auto w-full">
