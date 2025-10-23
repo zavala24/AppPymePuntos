@@ -1,3 +1,4 @@
+// src/shared/layout/AppLayout.tsx
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   AppBar,
@@ -30,7 +31,7 @@ import { useAuth } from "@/shared/auth/AuthContext";
 
 const drawerWidth = 240;
 
-/** Intenta obtener un nombre de usuario amigable */
+/** Toma un nombre para mostrar del LS o del JWT */
 function useDisplayName(token?: string | null) {
   return useMemo(() => {
     const lsUser =
@@ -60,9 +61,11 @@ function useDisplayName(token?: string | null) {
 }
 
 function initials(text: string) {
-  const parts = text.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? "";
-  const second = parts[0]?.[1] ?? "";
+  const t = (text || "").trim();
+  if (!t) return "US";
+  // Tomamos las dos primeras letras del primer "nombre"
+  const first = t[0] ?? "";
+  const second = t[1] ?? "";
   return (first + second).toUpperCase();
 }
 
@@ -74,9 +77,10 @@ export default function AppLayout() {
   const { token, logout } = useAuth();
   const displayName = useDisplayName(token);
 
-  // 🟣 Rol desde localStorage
+  // Rol desde localStorage
   const role = (localStorage.getItem("pa_role") || "").trim().toLowerCase();
   const isSuperAdmin = role === "superadmin";
+  const isAdmin = role === "admin";
 
   // Submenú de configuración
   const [openConfig, setOpenConfig] = useState(pathname.startsWith("/configuracion"));
@@ -89,15 +93,22 @@ export default function AppLayout() {
     navigate("/login", { replace: true });
   };
 
-  // 🔹 Links principales (Negocios solo SuperAdmin)
+  // ====== LINKS PRINCIPALES ======
+  // Dashboard siempre; luego "Mi negocio" solo para Admin; "Negocios" solo para SuperAdmin;
   const primaryLinks = [
     { to: "/dashboard", label: "Dashboard", icon: <DashboardIcon /> },
-    ...(isSuperAdmin ? [{ to: "/negocios", label: "Negocios", icon: <StoreIcon /> }] : []),
+    ...(isAdmin
+      ? [{ to: "/mi-negocio", label: "Mi negocio", icon: <StoreIcon /> }]
+      : []),
+    ...(isSuperAdmin
+      ? [{ to: "/negocios", label: "Negocios", icon: <StoreIcon /> }]
+      : []),
     { to: "/usuarios", label: "Usuarios", icon: <PeopleIcon /> },
     { to: "/notificaciones", label: "Notificaciones", icon: <NotificationsIcon /> },
   ];
 
-  // 🔹 Submenú de configuración (solo SuperAdmin ve estos)
+  // ====== SUBMENÚ CONFIGURACIÓN ======
+  // Solo SuperAdmin ve estos hijos
   const configItems = isSuperAdmin
     ? [
         { to: "/configuracion/negocio", label: "Negocio", icon: <StoreIcon /> },
@@ -151,7 +162,7 @@ export default function AppLayout() {
         <Toolbar />
         <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
           <List sx={{ px: 1 }}>
-            {/* === LINKS PRINCIPALES === */}
+            {/* === LINKS PRINCIPALES (con Mi negocio en 2do lugar si eres Admin) === */}
             {primaryLinks.map((l) => (
               <ListItemButton
                 key={l.to}
@@ -165,7 +176,7 @@ export default function AppLayout() {
               </ListItemButton>
             ))}
 
-            {/* === CONFIGURACIÓN === */}
+            {/* === CONFIGURACIÓN (siempre visible, pero sin hijos para no-SuperAdmin) === */}
             <ListItemButton
               onClick={() => hasConfigChildren && setOpenConfig((o) => !o)}
               selected={pathname.startsWith("/configuracion")}

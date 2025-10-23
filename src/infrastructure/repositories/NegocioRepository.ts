@@ -7,6 +7,8 @@ import { PagedResult } from "@/shared/types/PagedResult";
 import { CreateUpdateNegocioDto } from "@/application/dtos/negocio/CreateUpdateNegocioDto";
 import { CreateUpdateNegocioConfigDto } from "@/application/dtos/negocio/CreateUpdateNegocioConfigDto";
 import { NegocioConfigDto } from "@/application/dtos/negocio/NegocioConfigDto";
+import { NegocioWithConfigDto } from "@/application/dtos/negocio/NegocioWithConfigDto";
+import { UpdateNegocioWithConfigDto } from "@/application/dtos/negocio/UpdateNegocioWithConfigDto";
 
 export class NegocioRepository implements INegocioRepository {
   private base = "/Negocio";
@@ -53,4 +55,24 @@ export class NegocioRepository implements INegocioRepository {
     );
     return data;
   }
+
+  async getWithConfig(
+    idNegocio: number
+  ): Promise<ServiceResponse<NegocioWithConfigDto>> {
+    const { data } = await api.get<ServiceResponse<NegocioWithConfigDto>>(
+      `${this.base}/GetNegocioWithConfig`,
+      { params: { idNegocio } }
+    );
+    return data;
+  }
+
+  async updateWithConfig(
+    dto: UpdateNegocioWithConfigDto
+  ): Promise<ServiceResponse<boolean>> {
+    const { data } = await api.post<ServiceResponse<boolean>>(
+      `${this.base}/UpdateNegocioWithConfig`,
+      dto
+    );
+    return data;
+  } 
 }

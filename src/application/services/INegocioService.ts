@@ -5,6 +5,8 @@ import { PagedResult } from "@/shared/types/PagedResult";
 import { CreateUpdateNegocioDto } from "../dtos/negocio/CreateUpdateNegocioDto";
 import { CreateUpdateNegocioConfigDto } from "../dtos/negocio/CreateUpdateNegocioConfigDto";
 import { NegocioConfigDto } from "../dtos/negocio/NegocioConfigDto";
+import { NegocioWithConfigDto } from "../dtos/negocio/NegocioWithConfigDto";
+import { UpdateNegocioWithConfigDto } from "../dtos/negocio/UpdateNegocioWithConfigDto";
 
 
 export interface INegocioService {
@@ -24,4 +26,10 @@ export interface INegocioService {
     pageSize: number,
     search?: string | null
   ): Promise<ServiceResponse<PagedResult<NegocioConfigDto>>>;
+
+  getWithConfig(idNegocio: number): Promise<ServiceResponse<NegocioWithConfigDto>>;
+
+  updateWithConfig(
+    dto: UpdateNegocioWithConfigDto
+  ): Promise<ServiceResponse<boolean>>;
 }

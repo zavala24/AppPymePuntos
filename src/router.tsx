@@ -12,6 +12,7 @@ import NotificacionesPage from "./pages/notificaciones/NotificacionesPage";
 import ConfigNegocioPage from "./pages/configuracion/negocio/ConfigNegocioPage";
 import ConfigUsuariosAdminPage from "./pages/configuracion/usuarios/ConfigUsuariosAdminPage";
 import RequireRole from "./shared/router/RequireRole";
+import MiNegocioPage from "./pages/mi-negocio/MiNegocioPage";
 
 const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
@@ -39,7 +40,11 @@ const router = createBrowserRouter([
 
       { path: "usuarios", element: <UsuariosPage /> },
       { path: "notificaciones", element: <NotificacionesPage /> },
-
+      { path: "mi-negocio", element: (
+              <RequireRole allow={["Admin"]}>
+                <MiNegocioPage />
+              </RequireRole>
+            ),},
       {
         path: "configuracion",
         children: [
@@ -64,7 +69,7 @@ const router = createBrowserRouter([
             ),
           },
         ],
-      },
+      }
     ],
   },
 

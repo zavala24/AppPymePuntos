@@ -7,6 +7,8 @@ import { PagedResult } from "@/shared/types/PagedResult";
 import { CreateUpdateNegocioDto } from "../dtos/negocio/CreateUpdateNegocioDto";
 import { CreateUpdateNegocioConfigDto } from "../dtos/negocio/CreateUpdateNegocioConfigDto";
 import { NegocioConfigDto } from "../dtos/negocio/NegocioConfigDto";
+import { NegocioWithConfigDto } from "../dtos/negocio/NegocioWithConfigDto";
+import { UpdateNegocioWithConfigDto } from "../dtos/negocio/UpdateNegocioWithConfigDto";
 
 export class NegocioService implements INegocioService {
   constructor(private repo: INegocioRepository) {}
@@ -34,5 +36,17 @@ export class NegocioService implements INegocioService {
     search?: string | null
   ): Promise<ServiceResponse<PagedResult<NegocioConfigDto>>> {
     return this.repo.getConfigsPaged(page, pageSize, search);
+  }
+
+    getWithConfig(
+    idNegocio: number
+  ): Promise<ServiceResponse<NegocioWithConfigDto>> {
+    return this.repo.getWithConfig(idNegocio);
+  }
+
+  updateWithConfig(
+    dto: UpdateNegocioWithConfigDto
+  ): Promise<ServiceResponse<boolean>> {
+    return this.repo.updateWithConfig(dto);
   }
 }
