@@ -4,6 +4,8 @@ import type { UserAdminDto } from "@/application/dtos/usuario/UserAdminDto";
 import { api, apiPublic } from "../http/api";
 import { ServiceResponse } from "@/shared/types/service-response";
 import { PagedResult } from "@/shared/types/PagedResult";
+import { UsuarioPorNegocioDto } from "@/application/dtos/usuario/UsuarioPorNegocioDto";
+import { UpsertUsuarioDeNegocioDto } from "@/application/dtos/usuario/UpsertUsuarioDeNegocioDto";
 
 export class UserRepository {
   private base = "/User";
@@ -20,6 +22,21 @@ export class UserRepository {
     const { data } = await api.post<ServiceResponse<CreateUpdateUserAdminDto>>(
       `${this.base}/CreateUpdateUserAdmin`,
       dto
+    );
+    return data;
+  }
+
+  async GetUsuariosByNegocio(idNegocio: number): Promise<ServiceResponse<UsuarioPorNegocioDto[]>> {
+    const { data } = await api.get<ServiceResponse<UsuarioPorNegocioDto[]>>(
+      `${this.base}/GetUsuariosByNegocio`,
+      { params: { idNegocio } }
+    );
+    return data;
+  }
+
+  async upsertUsuarioDeNegocio(dto: UpsertUsuarioDeNegocioDto): Promise<ServiceResponse<boolean>> {
+    const { data } = await api.post<ServiceResponse<boolean>>(
+      `${this.base}/UpsertUsuarioDeNegocio`, dto
     );
     return data;
   }

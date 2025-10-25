@@ -63,7 +63,6 @@ function useDisplayName(token?: string | null) {
 function initials(text: string) {
   const t = (text || "").trim();
   if (!t) return "US";
-  // Tomamos las dos primeras letras del primer "nombre"
   const first = t[0] ?? "";
   const second = t[1] ?? "";
   return (first + second).toUpperCase();
@@ -77,13 +76,15 @@ export default function AppLayout() {
   const { token, logout } = useAuth();
   const displayName = useDisplayName(token);
 
-  // Rol desde localStorage
+  // Roles
   const role = (localStorage.getItem("pa_role") || "").trim().toLowerCase();
   const isSuperAdmin = role === "superadmin";
   const isAdmin = role === "admin";
 
-  // Submenú de configuración
-  const [openConfig, setOpenConfig] = useState(pathname.startsWith("/configuracion"));
+  // Submenú de configuración (solo aparece para SuperAdmin)
+  const [openConfig, setOpenConfig] = useState(
+    pathname.startsWith("/configuracion")
+  );
   useEffect(() => {
     setOpenConfig(pathname.startsWith("/configuracion"));
   }, [pathname]);
@@ -93,37 +94,79 @@ export default function AppLayout() {
     navigate("/login", { replace: true });
   };
 
-  // ====== LINKS PRINCIPALES ======
-  // Dashboard siempre; luego "Mi negocio" solo para Admin; "Negocios" solo para SuperAdmin;
-  const primaryLinks = [
-    { to: "/dashboard", label: "Dashboard", icon: <DashboardIcon /> },
-    ...(isAdmin
-      ? [{ to: "/mi-negocio", label: "Mi negocio", icon: <StoreIcon /> }]
-      : []),
+  // ====== ORDEN PERSONALIZADO ======
+  // 1) Negocios (SuperAdmin)
+  // 2) Mi negocio (Admin)
+  // 3) Mis usuarios (Admin)
+  // 4) Configuración (SuperAdmin)
+  // 5) Dashboard (último)
+  // 6) Cerrar sesión (ya está abajo)
+
+  const menuItems = [
     ...(isSuperAdmin
-      ? [{ to: "/negocios", label: "Negocios", icon: <StoreIcon /> }]
+      ? [
+          {
+            to: "/negocios",
+            label: "Negocios",
+            icon: <StoreIcon />,
+          },
+        ]
       : []),
-    { to: "/usuarios", label: "Usuarios", icon: <PeopleIcon /> },
-    { to: "/notificaciones", label: "Notificaciones", icon: <NotificationsIcon /> },
+    ...(isAdmin
+      ? [
+          {
+            to: "/mi-negocio",
+            label: "Mi negocio",
+            icon: <StoreIcon />,
+          },
+          {
+            to: "/mis-usuarios",
+            label: "Mis usuarios",
+            icon: <PeopleIcon />,
+          },
+        ]
+      : []),
+    // Configuración (solo SuperAdmin)
+    {
+      kind: "config" as const,
+      visible: isSuperAdmin,
+      selected: pathname.startsWith("/configuracion"),
+      children: isSuperAdmin
+        ? [
+            {
+              to: "/configuracion/negocio",
+              label: "Negocio",
+              icon: <StoreIcon />,
+            },
+            {
+              to: "/configuracion/usuarios",
+              label: "Usuarios",
+              icon: <PeopleIcon />,
+            },
+          ]
+        : [],
+    },
+    // Dashboard (al final)
+    {
+      to: "/dashboard",
+      label: "Dashboard",
+      icon: <DashboardIcon />,
+    },
+    // Notificaciones (si lo quieres conservar, ponlo arriba o comenta esta línea)
+    // { to: "/notificaciones", label: "Notificaciones", icon: <NotificationsIcon /> },
   ];
-
-  // ====== SUBMENÚ CONFIGURACIÓN ======
-  // Solo SuperAdmin ve estos hijos
-  const configItems = isSuperAdmin
-    ? [
-        { to: "/configuracion/negocio", label: "Negocio", icon: <StoreIcon /> },
-        { to: "/configuracion/usuarios", label: "Usuarios", icon: <PeopleIcon /> },
-      ]
-    : [];
-
-  const hasConfigChildren = configItems.length > 0;
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
-      {/* ======= TOP BAR ======= */}
+      {/* TOP BAR */}
       <AppBar position="fixed" color="primary" sx={{ zIndex: 1201 }}>
         <Toolbar>
-          <IconButton color="inherit" edge="start" onClick={() => setOpenDrawer(!openDrawer)} sx={{ mr: 2 }}>
+          <IconButton
+            color="inherit"
+            edge="start"
+            onClick={() => setOpenDrawer(!openDrawer)}
+            sx={{ mr: 2 }}
+          >
             <MenuIcon />
           </IconButton>
 
@@ -131,7 +174,7 @@ export default function AppLayout() {
             PremiaApp Admin
           </Typography>
 
-          {/* Bienvenida a la derecha */}
+          {/* Bienvenida */}
           <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 1.5 }}>
             <Tooltip title={displayName}>
               <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}>
@@ -145,7 +188,7 @@ export default function AppLayout() {
         </Toolbar>
       </AppBar>
 
-      {/* ======= DRAWER ======= */}
+      {/* DRAWER */}
       <Drawer
         variant="persistent"
         open={openDrawer}
@@ -162,58 +205,72 @@ export default function AppLayout() {
         <Toolbar />
         <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
           <List sx={{ px: 1 }}>
-            {/* === LINKS PRINCIPALES (con Mi negocio en 2do lugar si eres Admin) === */}
-            {primaryLinks.map((l) => (
-              <ListItemButton
-                key={l.to}
-                component={NavLink}
-                to={l.to}
-                selected={pathname.startsWith(l.to)}
-                sx={{ borderRadius: 2, mb: 0.5 }}
-              >
-                <ListItemIcon>{l.icon}</ListItemIcon>
-                <ListItemText primary={l.label} />
-              </ListItemButton>
-            ))}
+            {menuItems.map((item, idx) => {
+              // Configuración (bloque)
+              if ((item as any).kind === "config") {
+                const cfg = item as {
+                  kind: "config";
+                  visible: boolean;
+                  selected: boolean;
+                  children: Array<{ to: string; label: string; icon: JSX.Element }>;
+                };
+                if (!cfg.visible) return null;
 
-            {/* === CONFIGURACIÓN (siempre visible, pero sin hijos para no-SuperAdmin) === */}
-            <ListItemButton
-              onClick={() => hasConfigChildren && setOpenConfig((o) => !o)}
-              selected={pathname.startsWith("/configuracion")}
-              sx={{ borderRadius: 2, mt: 0.5 }}
-            >
-              <ListItemIcon>
-                <SettingsIcon />
-              </ListItemIcon>
-              <ListItemText primary="Configuración" />
-              {hasConfigChildren ? (openConfig ? <ExpandLess /> : <ExpandMore />) : null}
-            </ListItemButton>
-
-            {/* Submenú (solo SuperAdmin) */}
-            {hasConfigChildren && (
-              <Collapse in={openConfig} timeout="auto" unmountOnExit>
-                <List component="div" disablePadding sx={{ pl: 4, pr: 1, pt: 0.5 }}>
-                  {configItems.map((c) => (
+                return (
+                  <Box key={`cfg-${idx}`}>
                     <ListItemButton
-                      key={c.to}
-                      component={NavLink}
-                      to={c.to}
-                      selected={pathname.startsWith(c.to)}
-                      sx={{ borderRadius: 2, mb: 0.5 }}
+                      onClick={() => setOpenConfig((o) => !o)}
+                      selected={cfg.selected}
+                      sx={{ borderRadius: 2, mt: 0.5 }}
                     >
-                      <ListItemIcon>{c.icon}</ListItemIcon>
-                      <ListItemText primary={c.label} />
+                      <ListItemIcon>
+                        <SettingsIcon />
+                      </ListItemIcon>
+                      <ListItemText primary="Configuración" />
+                      {openConfig ? <ExpandLess /> : <ExpandMore />}
                     </ListItemButton>
-                  ))}
-                </List>
-              </Collapse>
-            )}
+
+                    <Collapse in={openConfig} timeout="auto" unmountOnExit>
+                      <List component="div" disablePadding sx={{ pl: 4, pr: 1, pt: 0.5 }}>
+                        {cfg.children.map((c) => (
+                          <ListItemButton
+                            key={c.to}
+                            component={NavLink}
+                            to={c.to}
+                            selected={pathname.startsWith(c.to)}
+                            sx={{ borderRadius: 2, mb: 0.5 }}
+                          >
+                            <ListItemIcon>{c.icon}</ListItemIcon>
+                            <ListItemText primary={c.label} />
+                          </ListItemButton>
+                        ))}
+                      </List>
+                    </Collapse>
+                  </Box>
+                );
+              }
+
+              // Ítems normales
+              const it = item as { to: string; label: string; icon: JSX.Element };
+              return (
+                <ListItemButton
+                  key={it.to}
+                  component={NavLink}
+                  to={it.to}
+                  selected={pathname.startsWith(it.to)}
+                  sx={{ borderRadius: 2, mb: 0.5 }}
+                >
+                  <ListItemIcon>{it.icon}</ListItemIcon>
+                  <ListItemText primary={it.label} />
+                </ListItemButton>
+              );
+            })}
           </List>
 
-          {/* Spacer para empujar el botón al fondo */}
+          {/* Spacer */}
           <Box sx={{ flexGrow: 1 }} />
 
-          {/* === CERRAR SESIÓN === */}
+          {/* Cerrar sesión */}
           <Box sx={{ p: 1, borderTop: (t) => `1px solid ${t.palette.divider}` }}>
             <ListItemButton
               onClick={onLogout}
@@ -226,13 +283,16 @@ export default function AppLayout() {
               <ListItemIcon>
                 <LogoutRounded />
               </ListItemIcon>
-              <ListItemText primary="Cerrar sesión" primaryTypographyProps={{ fontWeight: 700 }} />
+              <ListItemText
+                primary="Cerrar sesión"
+                primaryTypographyProps={{ fontWeight: 700 }}
+              />
             </ListItemButton>
           </Box>
         </Box>
       </Drawer>
 
-      {/* ======= CONTENIDO ======= */}
+      {/* CONTENIDO */}
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
         <div className="max-w-7xl mx-auto w-full">

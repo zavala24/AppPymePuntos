@@ -435,19 +435,43 @@ export default function ConfigNegocioPage() {
           sx={{ mb: 3, maxWidth: { xs: "100%", md: 720 } }}
         />
         <Box sx={{ height: dynamicHeight, width: "100%" }}>
-          <DataGrid
-            rows={rows}
-            columns={columns}
-            getRowId={(r) => r.id}
-            loading={loading}
-            disableRowSelectionOnClick
-            onRowClick={onRowClick}
-            paginationMode="server"
-            rowCount={rowCount}
-            paginationModel={paginationModel}
-            onPaginationModelChange={setPaginationModel}
-            pageSizeOptions={[5, 10, 20, 50]}
-          />
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          getRowId={(r) => r.id}
+          loading={loading}
+          disableRowSelectionOnClick
+          onRowClick={onRowClick}
+          paginationMode="server"
+          rowCount={rowCount}
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          pageSizeOptions={[5, 10, 20, 50]}
+          // 👇 Zebra igual que en NegociosPage
+          getRowClassName={(p) =>
+            p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd"
+          }
+          sx={{
+            borderRadius: 3,
+            "& .MuiDataGrid-columnHeaders": {
+              backgroundColor: "action.hover",
+              fontWeight: 700,
+            },
+            "& .row-even": { backgroundColor: "#ffffff" },
+            "& .row-odd": { backgroundColor: "rgba(14,165,233,0.06)" },
+            "& .MuiDataGrid-row:hover": {
+              backgroundColor: "rgba(14,165,233,0.12) !important",
+            },
+            // 👇 Quitar el borde/outline azul de foco (que es lo que ves “raro”)
+            "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
+              outline: "none",
+            },
+            "& .MuiDataGrid-columnHeader:focus, & .MuiDataGrid-columnHeader:focus-within":
+              {
+                outline: "none",
+              },
+          }}
+        />
         </Box>
       </Paper>
 
