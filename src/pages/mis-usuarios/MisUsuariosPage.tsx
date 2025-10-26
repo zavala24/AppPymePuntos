@@ -13,14 +13,19 @@ import {
   Alert,
   Switch,
   FormControlLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
-import { DataGrid, GridColDef } from "@mui/x-data-grid";
+import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
 import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Close";
+import DeleteIcon from "@mui/icons-material/Delete";
 import ShieldIcon from "@mui/icons-material/Security";
 import CheckIcon from "@mui/icons-material/CheckCircle";
-import CloseIcon from "@mui/icons-material/HighlightOff";
+import RemoveIcon from "@mui/icons-material/RemoveCircleOutline";
 
 import { UserRepository } from "@/infrastructure/repositories/UserRepository";
 import { UserService } from "@/application/services/UserService";
@@ -28,27 +33,8 @@ import type { IUserService } from "@/application/services/IUserService";
 import { UsuarioPorNegocioDto } from "@/application/dtos/usuario/UsuarioPorNegocioDto";
 import { UpsertUsuarioDeNegocioDto } from "@/application/dtos/usuario/UpsertUsuarioDeNegocioDto";
 
-// ---------- Helpers ----------
-const onlyDigits = (s: string) => s.replace(/\D/g, "");
-
-const formatPhone = (digits: string) => {
-  const d = onlyDigits(digits).slice(0, 10);
-  if (d.length === 0) return "";           
-  if (d.length <= 3) return `(${d}`;
-  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-};
-
-const isValidPhone10 = (digits: string) => /^\d{10}$/.test(onlyDigits(digits));
-const isValidEmail = (email: string) =>
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-
-const formatDate = (iso: string | null | undefined) => {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString("es-MX", { day: "2-digit", month: "2-digit", year: "numeric" });
-};
+// ---------- helpers ----------
+const userService: IUserService = new UserService(new UserRepository());
 
 function getIdNegocioActual(): number | null {
   const ls = localStorage.getItem("pa_idNegocio");
@@ -60,36 +46,63 @@ function getIdNegocioActual(): number | null {
     if (payload?.idNegocio && !Number.isNaN(Number(payload.idNegocio))) {
       return Number(payload.idNegocio);
     }
-  } catch {
-    /* noop */
-  }
+  } catch {}
   return null;
 }
 
-const userService: IUserService = new UserService(new UserRepository());
+function formatDateDDMMYYYY(iso: string | Date | null | undefined) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}/${mm}/${yyyy}`;
+}
 
-// ---------- Tipos ----------
-type Row = UsuarioPorNegocioDto;
+function onlyDigits(s: string) {
+  return s.replace(/\D+/g, "");
+}
+
+function formatPhoneForDisplay(digits: string) {
+  const clean = onlyDigits(digits).slice(0, 10);
+  return clean; // muestra sin paréntesis; solo números como pediste
+}
+
+function isValidEmail(v: string) {
+  if (!v) return true; // opcional
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+}
+
+// ---------- tipos ----------
+type Row = UsuarioPorNegocioDto & { id: number };
 
 type FormState = {
-  idUsuario: number | null;
+  idUsuario: number | null; // para saber si edita
   usuarioNombre: string;
   nombre: string;
   apellidoPaterno: string;
   apellidoMaterno: string;
   email: string;
-  telefono: string; // guardamos SOLO dígitos (10)
+  telefono: string;
+  password: string; // opcional al editar
   activo: boolean;
-  password: string; // opcional
 };
 
-// ---------- Componente ----------
 export default function MisUsuariosPage() {
-  // Datos
-  const [rows, setRows] = React.useState<Row[]>([]);
-  const [search, setSearch] = React.useState("");
+  // ------- estado base -------
+  const [idNegocio, setIdNegocio] = React.useState<number | null>(null);
 
-  // Edición
+  // grid
+  const [rows, setRows] = React.useState<Row[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const [paginationModel, setPaginationModel] = React.useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 5,
+  });
+
+  // formulario
   const [form, setForm] = React.useState<FormState>({
     idUsuario: null,
     usuarioNombre: "",
@@ -98,20 +111,26 @@ export default function MisUsuariosPage() {
     apellidoMaterno: "",
     email: "",
     telefono: "",
-    activo: true,
     password: "",
+    activo: true,
   });
-  const isEditing = form.idUsuario != null && form.idUsuario > 0;
 
-  // Validaciones UI
-  const [phoneError, setPhoneError] = React.useState<string>("");
-  const [emailError, setEmailError] = React.useState<string>("");
+  const isEditing = form.idUsuario != null;
 
-  // Flags
-  const [loading, setLoading] = React.useState(false);
-  const [saving, setSaving] = React.useState(false);
+  // validaciones
+  const emailValid = React.useMemo(() => isValidEmail(form.email), [form.email]);
+  const phoneDigits = React.useMemo(() => onlyDigits(form.telefono), [form.telefono]);
+  const phoneValid = phoneDigits.length === 10;
 
-  // Toast
+  const allRequiredOk =
+    form.usuarioNombre.trim() &&
+    form.nombre.trim() &&
+    form.apellidoPaterno.trim() &&
+    phoneValid;
+
+  const canSave = !!idNegocio && allRequiredOk;
+
+  // toast
   const [toastOpen, setToastOpen] = React.useState(false);
   const [toastMsg, setToastMsg] = React.useState("");
   const [toastSeverity, setToastSeverity] = React.useState<"success" | "error">("success");
@@ -121,52 +140,42 @@ export default function MisUsuariosPage() {
     setToastOpen(true);
   };
 
-  // Cargar usuarios
-  const loadUsers = React.useCallback(async () => {
-    const idNegocio = getIdNegocioActual();
-    if (!idNegocio) {
-      showToast("No se pudo determinar el negocio.", "error");
-      return;
-    }
+  // dialogo eliminar
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+
+  // ------- carga inicial -------
+  const load = React.useCallback(async () => {
+    const id = getIdNegocioActual();
+    setIdNegocio(id);
+    if (!id) return;
+
     try {
       setLoading(true);
-      const resp = await userService.GetUsuariosByNegocio(idNegocio);
+      const resp = await userService.GetUsuariosByNegocio(id);
       if (resp.status === 200 && resp.data) {
-        setRows(resp.data);
+        const list = resp.data.map((u) => ({
+          ...u,
+          id: u.idUsuario, // grid id
+          telefono: formatPhoneForDisplay(u.telefono ?? ""),
+        }));
+        setRows(list);
       } else {
         setRows([]);
-        showToast(resp.message || "No se pudieron cargar los usuarios.", "error");
+        if (resp.message) showToast(resp.message, "error");
       }
     } catch (e: any) {
-      setRows([]);
       showToast(e?.message ?? "Error al cargar usuarios.", "error");
+      setRows([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
   React.useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
+    load();
+  }, [load]);
 
-  // Filtros
-  const filtered = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => {
-      const hay = (v?: string | null) => (v || "").toLowerCase().includes(q);
-      return (
-        hay(r.usuarioNombre) ||
-        hay(r.nombre) ||
-        hay(r.apellidoPaterno) ||
-        hay(r.apellidoMaterno) ||
-        hay(r.email) ||
-        hay(r.telefono)
-      );
-    });
-  }, [rows, search]);
-
-  // Acciones
+  // ------- limpiar / nuevo -------
   const clearForm = () =>
     setForm({
       idUsuario: null,
@@ -176,63 +185,37 @@ export default function MisUsuariosPage() {
       apellidoMaterno: "",
       email: "",
       telefono: "",
-      activo: true,
       password: "",
+      activo: true,
     });
 
-  const onNuevo = () => {
-    clearForm();
-    setPhoneError("");
-    setEmailError("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const onCancelarEdicion = () => {
-    clearForm();
-    setPhoneError("");
-    setEmailError("");
-  };
-
+  // ------- click fila -------
   const onRowClick = (params: any) => {
     const r = params.row as Row;
     setForm({
       idUsuario: r.idUsuario,
-      usuarioNombre: r.usuarioNombre || "",
-      nombre: r.nombre || "",
-      apellidoPaterno: r.apellidoPaterno || "",
-      apellidoMaterno: r.apellidoMaterno || "",
-      email: r.email || "",
-      telefono: onlyDigits(r.telefono || ""), // guardamos dígitos
-      activo: !!r.activo,
+      usuarioNombre: r.usuarioNombre,
+      nombre: r.nombre,
+      apellidoPaterno: r.apellidoPaterno,
+      apellidoMaterno: r.apellidoMaterno ?? "",
+      email: r.email ?? "",
+      telefono: formatPhoneForDisplay(r.telefono ?? ""),
       password: "",
+      activo: !!r.activo,
     });
-    setPhoneError("");
-    setEmailError("");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // ------- guardar -------
   const onGuardar = async () => {
-    const idNegocio = getIdNegocioActual();
-    if (!idNegocio) {
-      showToast("No se pudo determinar el negocio.", "error");
+    if (!idNegocio) return;
+
+    if (!emailValid) {
+      showToast("Email inválido.", "error");
       return;
     }
-    if (!form.usuarioNombre.trim()) {
-      showToast("El usuario es obligatorio.", "error");
-      return;
-    }
-    if (!form.nombre.trim()) {
-      showToast("El nombre es obligatorio.", "error");
-      return;
-    }
-    if (!isValidPhone10(form.telefono)) {
-      setPhoneError("Ingresa un teléfono de 10 dígitos.");
-      showToast("El teléfono es requerido (10 dígitos).", "error");
-      return;
-    }
-    if (form.email.trim() && !isValidEmail(form.email)) {
-      setEmailError("Correo no válido.");
-      showToast("Corrige el correo electrónico.", "error");
+    if (!phoneValid) {
+      showToast("El teléfono debe tener 10 dígitos.", "error");
       return;
     }
 
@@ -241,84 +224,76 @@ export default function MisUsuariosPage() {
       idNegocio,
       usuarioNombre: form.usuarioNombre.trim(),
       nombre: form.nombre.trim(),
-      apellidoPaterno: form.apellidoPaterno || null,
-      apellidoMaterno: form.apellidoMaterno || null,
+      apellidoPaterno: form.apellidoPaterno.trim(),
+      apellidoMaterno: form.apellidoMaterno?.trim() || "",
       email: form.email?.trim() || null,
-      telefono: form.telefono, // dígitos
-      activo: form.activo,
+      telefono: phoneDigits,
       password: form.password?.trim() || null,
       usuarioOperacion: localStorage.getItem("pa_user") || "admin",
+      activo: form.activo,
     };
 
     try {
-      setSaving(true);
       const resp = await userService.upsertUsuarioDeNegocio(dto);
-      if (resp.status === 200) {
-        showToast(resp.message || (isEditing ? "Usuario actualizado." : "Usuario creado."), "success");
-        await loadUsers();
+      if (resp.status === 200 || resp.status === 201) {
+        showToast(resp.message || (isEditing ? "Usuario actualizado" : "Usuario creado"), "success");
         clearForm();
+        await load();
       } else {
-        showToast(resp.message || "No se pudo guardar el usuario.", "error");
+        showToast(resp.message || "No se pudo guardar.", "error");
       }
     } catch (e: any) {
       showToast(e?.message ?? "Error al guardar.", "error");
-    } finally {
-      setSaving(false);
     }
   };
 
-  // Columnas
+  // ------- eliminar -------
+  const onConfirmDelete = async () => {
+    if (!idNegocio || !form.idUsuario) return;
+    try {
+      const resp = await userService.deleteUsuarioDeNegocio(form.idUsuario, idNegocio);
+      if (resp.status === 200) {
+        showToast(resp.message || "Usuario eliminado.", "success");
+        setDeleteOpen(false);
+        clearForm();
+        await load();
+      } else {
+        showToast(resp.message || "No se pudo eliminar.", "error");
+      }
+    } catch (e: any) {
+      showToast(e?.message ?? "Error al eliminar.", "error");
+    }
+  };
+
+  // ------- columnas -------
   const columns: GridColDef<Row>[] = [
-    {
-      field: "usuarioNombre",
-      headerName: "Usuario",
-      flex: 0.8,
-    },
-    { field: "nombre", headerName: "Nombre", flex: 1.1 },
+    { field: "usuarioNombre", headerName: "Usuario", flex: 0.9 },
+    { field: "nombre", headerName: "Nombre", flex: 1.0 },
     { field: "apellidoPaterno", headerName: "Apellido paterno", flex: 0.9 },
     { field: "apellidoMaterno", headerName: "Apellido materno", flex: 0.9 },
-    {
-      field: "email",
-      headerName: "Email",
-      flex: 1.2,
-      renderCell: (p) => {
-        const email = (p.value as string) || "";
-        if (!email) return "";
-        return (
-          <a href={`mailto:${email}`} style={{ color: "#1976d2", textDecoration: "none" }}>
-            {email}
-          </a>
-        );
-      },
-    },
-    {
-      field: "telefono",
-      headerName: "Teléfono",
-      width: 160,
-      valueGetter: (p) => {
-        const d = onlyDigits((p as string) || "");
-        return isValidPhone10(d) ? formatPhone(d) : p;
-      },
-    },
+    { field: "email", headerName: "Email", flex: 1.2 },
+    { field: "telefono", headerName: "Teléfono", width: 140 },
     {
       field: "fechaRegistro",
       headerName: "Registro",
-      width: 160,
-      valueGetter: (p) => formatDate(p as string),
+      width: 130,
+      valueGetter: (p) => formatDateDDMMYYYY(p),
     },
     {
       field: "activo",
       headerName: "Activo",
-      width: 110,
+      width: 90,
       align: "center",
       headerAlign: "center",
       renderCell: (p) =>
-        p.value ? <CheckIcon color="success" fontSize="small" /> : <CloseIcon color="error" fontSize="small" />,
+        p.value ? <CheckIcon color="success" fontSize="small" /> : <RemoveIcon color="disabled" fontSize="small" />,
+      sortable: false,
+      filterable: false,
     },
   ];
 
-  // Altura grid
-  const dynamicHeight = Math.min(700, 120 + Math.max(5, filtered.length) * 55);
+  // altura dinámica
+  const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
   return (
     <Box className="mx-auto w-full max-w-[1800px] px-4 md:px-6 py-4">
@@ -336,116 +311,97 @@ export default function MisUsuariosPage() {
           {isEditing ? "Editar usuario" : "Nuevo usuario"}
         </Typography>
 
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+            columnGap: 2,
+            rowGap: 2,
+          }}
+        >
           <TextField
-            fullWidth
             label="Usuario *"
             value={form.usuarioNombre}
             onChange={(e) => setForm((f) => ({ ...f, usuarioNombre: e.target.value }))}
-            disabled={loading || saving}
+            required
           />
           <TextField
-            fullWidth
-            label="Nombre *"
+            label="Nombre"
             value={form.nombre}
             onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
-            disabled={loading || saving}
+            required
           />
-        </Stack>
 
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
           <TextField
-            fullWidth
             label="Apellido paterno"
             value={form.apellidoPaterno}
             onChange={(e) => setForm((f) => ({ ...f, apellidoPaterno: e.target.value }))}
-            disabled={loading || saving}
+            required
           />
           <TextField
-            fullWidth
             label="Apellido materno"
             value={form.apellidoMaterno}
             onChange={(e) => setForm((f) => ({ ...f, apellidoMaterno: e.target.value }))}
-            disabled={loading || saving}
           />
-        </Stack>
 
-        {/* Email (opcional) y Teléfono (requerido) */}
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
           <TextField
-            fullWidth
             label="Email (opcional)"
             value={form.email}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            onBlur={() => setForm((f) => ({ ...f, email: f.email.trim().toLowerCase() }))}
+            error={!emailValid}
+            helperText={!emailValid ? "Email inválido" : "Opcional"}
+          />
+          <TextField
+            label="Teléfono"
+            value={form.telefono}
             onChange={(e) => {
-              const v = e.target.value;
-              setForm((f) => ({ ...f, email: v }));
-              if (v.trim().length === 0) setEmailError("");
-              else if (!isValidEmail(v)) setEmailError("Correo no válido (ej. usuario@dominio.com).");
-              else setEmailError("");
+              const next = onlyDigits(e.target.value).slice(0, 10);
+              setForm((f) => ({ ...f, telefono: next }));
             }}
-            onBlur={() => {
-              const v = (form.email || "").trim();
-              if (v && !isValidEmail(v)) setEmailError("Correo no válido.");
-            }}
-            error={!!emailError}
-            helperText={emailError || "Opcional"}
-            disabled={loading || saving}
+            inputProps={{ inputMode: "numeric", pattern: "[0-9]*", maxLength: 10 }}
+            error={form.telefono !== "" && !phoneValid}
+            helperText="Requerido, 10 dígitos"
+            required
           />
 
           <TextField
-            fullWidth
-            required
-            label="Teléfono"
-            placeholder="(###) ###-####"
-            value={formatPhone(form.telefono)}
-            onChange={(e) => {
-              const digits = onlyDigits(e.target.value);
-              if (digits.length <= 10) {
-                setForm((f) => ({ ...f, telefono: digits }));
-                setPhoneError("");
-              }
-            }}
-            onBlur={() => {
-              if (!isValidPhone10(form.telefono)) {
-                setPhoneError("Ingresa un teléfono de 10 dígitos.");
-              } else {
-                setPhoneError("");
-              }
-            }}
-            error={!!phoneError}
-            helperText={phoneError || "Requerido, 10 dígitos"}
-            inputProps={{ inputMode: "numeric", maxLength: 16 }}
-            disabled={loading || saving}
+            label="Nueva contraseña (opcional)"
+            value={form.password}
+            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+            type="password"
+            sx={{ gridColumn: "1 / -1" }}
           />
-        </Stack>
-
-        <TextField
-          fullWidth
-          label="Nueva contraseña (opcional)"
-          value={form.password}
-          onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-          sx={{ mb: 1.5 }}
-          disabled={loading || saving}
-        />
+        </Box>
 
         <FormControlLabel
+          sx={{ mt: 1 }}
           control={
             <Switch
               checked={form.activo}
               onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))}
-              disabled={loading || saving}
             />
           }
           label="Activo"
         />
 
-        <Stack direction="row" justifyContent="flex-end" gap={1} sx={{ mt: 1 }}>
-          <Button startIcon={<AddIcon />} variant="outlined" onClick={onNuevo}>
+        <Stack direction="row" justifyContent="flex-end" gap={1} sx={{ mt: 2 }}>
+          <Button startIcon={<AddIcon />} variant="outlined" onClick={clearForm}>
             Nuevo
           </Button>
           {isEditing && (
-            <Button startIcon={<CancelIcon />} variant="outlined" color="warning" onClick={onCancelarEdicion}>
+            <Button startIcon={<CancelIcon />} variant="outlined" color="warning" onClick={clearForm}>
               Cancelar edición
+            </Button>
+          )}
+          {isEditing && (
+            <Button
+              startIcon={<DeleteIcon />}
+              variant="outlined"
+              color="error"
+              onClick={() => setDeleteOpen(true)}
+            >
+              Eliminar
             </Button>
           )}
           <Button
@@ -453,14 +409,14 @@ export default function MisUsuariosPage() {
             variant="contained"
             color="success"
             onClick={onGuardar}
-            disabled={saving || loading}
+            disabled={!canSave}
           >
-            {saving ? (isEditing ? "Actualizando..." : "Guardando...") : isEditing ? "Actualizar" : "Guardar"}
+            {isEditing ? "Actualizar" : "Guardar"}
           </Button>
         </Stack>
       </Paper>
 
-      {/* Grid */}
+      {/* GRID */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
         <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 1 }}>
           Usuarios del negocio
@@ -483,25 +439,58 @@ export default function MisUsuariosPage() {
 
         <Box sx={{ height: dynamicHeight, width: "100%" }}>
           <DataGrid
-            rows={filtered}
+            rows={rows.filter((r) => {
+              const q = search.trim().toLowerCase();
+              if (!q) return true;
+              return (
+                r.usuarioNombre?.toLowerCase().includes(q) ||
+                r.nombre?.toLowerCase().includes(q) ||
+                r.apellidoPaterno?.toLowerCase().includes(q) ||
+                r.apellidoMaterno?.toLowerCase().includes(q) ||
+                (r.email ?? "").toLowerCase().includes(q)
+              );
+            })}
             columns={columns}
-            getRowId={(r) => r.idUsuario}
+            getRowId={(r) => r.id}
             loading={loading}
             disableRowSelectionOnClick
             onRowClick={onRowClick}
+            paginationMode="client"
+            rowCount={rows.length}
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[5, 10, 20, 50]}
-            initialState={{ pagination: { paginationModel: { page: 0, pageSize: 5 } } }}
+            getRowClassName={(p) => (p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd")}
             sx={{
               borderRadius: 3,
               "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
-              "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.10) !important" },
+              "& .row-even": { backgroundColor: "#ffffff" },
+              "& .row-odd": { backgroundColor: "rgba(14,165,233,0.06)" },
+              "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.12) !important" },
               "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
             }}
           />
         </Box>
       </Paper>
 
-      {/* Toast */}
+      {/* DIALOG ELIMINAR */}
+      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Eliminar usuario</DialogTitle>
+        <DialogContent>
+          Esta acción quitará el rol de vendedor y lo desvinculará del negocio. El usuario quedará
+          como cliente. ¿Deseas continuar?
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button variant="outlined" onClick={() => setDeleteOpen(false)}>
+            Cancelar
+          </Button>
+          <Button variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={onConfirmDelete}>
+            Eliminar
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* TOAST */}
       <Snackbar
         open={toastOpen}
         autoHideDuration={3500}

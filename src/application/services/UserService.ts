@@ -24,4 +24,8 @@ export class UserService implements IUserService {
   upsertUsuarioDeNegocio(dto: UpsertUsuarioDeNegocioDto): Promise<ServiceResponse<boolean>> {
     return this.repo.upsertUsuarioDeNegocio(dto);
   }
+
+    deleteUsuarioDeNegocio(idUsuario: number, idNegocio: number) {
+    return this.repo.deleteUsuarioDeNegocio(idUsuario, idNegocio);
+  }
 }

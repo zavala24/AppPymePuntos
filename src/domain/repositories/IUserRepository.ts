@@ -8,4 +8,9 @@ export interface IUserRepository {
 
   /** Crear o actualizar usuario de negocio */
   upsertUsuarioDeNegocio(dto: UpsertUsuarioDeNegocioDto): Promise<ServiceResponse<boolean>>;
+
+    deleteUsuarioDeNegocio(
+    idUsuario: number,
+    idNegocio: number
+  ): Promise<ServiceResponse<boolean>>;
 }

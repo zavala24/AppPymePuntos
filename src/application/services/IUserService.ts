@@ -13,4 +13,8 @@ export interface IUserService {
 
   /** Crea o actualiza un usuario y lo liga al negocio (Role=2, IsAdmin=false) */
   upsertUsuarioDeNegocio(dto: UpsertUsuarioDeNegocioDto): Promise<ServiceResponse<boolean>>;
+    deleteUsuarioDeNegocio(
+    idUsuario: number,
+    idNegocio: number
+  ): Promise<ServiceResponse<boolean>>;
 }

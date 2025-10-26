@@ -98,9 +98,9 @@ export default function AppLayout() {
   // 1) Negocios (SuperAdmin)
   // 2) Mi negocio (Admin)
   // 3) Mis usuarios (Admin)
-  // 4) Configuración (SuperAdmin)
-  // 5) Dashboard (último)
-  // 6) Cerrar sesión (ya está abajo)
+  // 4) Notificaciones (Admin)
+  // 5) Configuración (SuperAdmin)
+  // 6) Dashboard (último)
 
   const menuItems = [
     ...(isSuperAdmin
@@ -123,6 +123,11 @@ export default function AppLayout() {
             to: "/mis-usuarios",
             label: "Mis usuarios",
             icon: <PeopleIcon />,
+          },
+          {
+            to: "/notificaciones",
+            label: "Notificaciones",
+            icon: <NotificationsIcon />,
           },
         ]
       : []),
@@ -152,8 +157,6 @@ export default function AppLayout() {
       label: "Dashboard",
       icon: <DashboardIcon />,
     },
-    // Notificaciones (si lo quieres conservar, ponlo arriba o comenta esta línea)
-    // { to: "/notificaciones", label: "Notificaciones", icon: <NotificationsIcon /> },
   ];
 
   return (
@@ -206,7 +209,7 @@ export default function AppLayout() {
         <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
           <List sx={{ px: 1 }}>
             {menuItems.map((item, idx) => {
-              // Configuración (bloque)
+              // Bloque Configuración
               if ((item as any).kind === "config") {
                 const cfg = item as {
                   kind: "config";

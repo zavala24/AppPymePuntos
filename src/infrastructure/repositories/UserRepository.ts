@@ -40,4 +40,12 @@ export class UserRepository {
     );
     return data;
   }
+
+    async deleteUsuarioDeNegocio(idUsuario: number, idNegocio: number) {
+    const { data } = await api.delete<ServiceResponse<boolean>>(
+      `${this.base}/DeleteUsuarioByNegocio`,
+      { params: { idUsuario, idNegocio } }
+    );
+    return data;
+  }
 }

@@ -53,6 +53,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const t = res.data.token;
         const u = res.data.user ?? "";
         const r = res.data.role ?? "";
+        const n = res.data.idNegocio ?? "";
 
         localStorage.setItem("pa_token", t);
         localStorage.setItem("pa_user", u);
