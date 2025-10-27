@@ -1,329 +1,326 @@
-import React from "react";
-import { motion } from "framer-motion";
+import * as React from "react";
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+  Box,
+  Stack,
+  Paper,
+  Typography,
+  Divider,
+  IconButton,
+  Button,
+  TextField,
+  CircularProgress,
+} from "@mui/material";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
+import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
+import PercentIcon from "@mui/icons-material/Percent";
+import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import {
-  LineChart as RLineChart,
-  Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
-  Tooltip,
-  ResponsiveContainer,
   CartesianGrid,
-  BarChart as RBarChart,
-  Bar,
+  Tooltip,
+  LineChart,
+  Line,
+  ResponsiveContainer,
+  Cell,
 } from "recharts";
+import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
+
+// Services
+import { SellRepository } from "@/infrastructure/repositories/SellRepository";
+import { SellService } from "@/application/services/SellService";
 import {
-  ArrowUpRight,
-  ArrowDownRight,
-  Plus,
-  Bell,
-  Users,
-  Building2,
-  CheckCircle2,
-  AlertTriangle,
-} from "lucide-react";
 
-// -----------------------------
-// MOCK DATA (reemplaza por tus endpoints)
-// -----------------------------
-const kpis = [
-  {
-    label: "Negocios totales",
-    value: 482,
-    delta: "+12%",
-    trend: "up",
-    icon: <Building2 className="h-5 w-5" />,
-  },
-  {
-    label: "Usuarios activos",
-    value: 129,
-    delta: "+5%",
-    trend: "up",
-    icon: <Users className="h-5 w-5" />,
-  },
-  {
-    label: "Conversión",
-    value: "31%",
-    delta: "-2.1%",
-    trend: "down",
-    icon: <CheckCircle2 className="h-5 w-5" />,
-  },
-  {
-    label: "Pendientes",
-    value: 9,
-    delta: "+3",
-    trend: "up",
-    icon: <Bell className="h-5 w-5" />,
-  },
+} from "@/domain/repositories/ISellRepository";
+import { ServiceResponse } from "@/shared/types/service-response";
+import { DashboardVentasRequest, DashboardVentasResponse, VentaRowDto } from "@/application/dtos/ventas/DashboardVentasDto";
+
+const sellService = new SellService(new SellRepository());
+
+/* ============ Helpers ============ */
+function fmtCurrency(n: number) {
+  return n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
+}
+function fmtDate(iso: string) {
+  const d = new Date(iso);
+  return d.toLocaleString("es-MX", { dateStyle: "medium" });
+}
+
+const SOFT_COLORS = [
+  "#60a5fa", "#34d399", "#f59e0b", "#f472b6",
+  "#a78bfa", "#fb7185", "#22d3ee", "#86efac",
 ];
 
-const lineData = [
-  { name: "Lun", negocios: 8, usuarios: 23 },
-  { name: "Mar", negocios: 14, usuarios: 25 },
-  { name: "Mié", negocios: 11, usuarios: 21 },
-  { name: "Jue", negocios: 18, usuarios: 31 },
-  { name: "Vie", negocios: 21, usuarios: 33 },
-  { name: "Sáb", negocios: 9, usuarios: 15 },
-  { name: "Dom", negocios: 6, usuarios: 10 },
-];
+/* ============ Componente principal ============ */
+export default function DashboardPage() {
+  const usuarioNombre = localStorage.getItem("pa_user") || "";
+  const [desde, setDesde] = React.useState<string>("");
+  const [hasta, setHasta] = React.useState<string>("");
 
-const barData = [
-  { name: "Ene", conversion: 24 },
-  { name: "Feb", conversion: 27 },
-  { name: "Mar", conversion: 29 },
-  { name: "Abr", conversion: 33 },
-  { name: "May", conversion: 31 },
-  { name: "Jun", conversion: 30 },
-];
+  const [data, setData] = React.useState<DashboardVentasResponse | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-const actividadReciente = [
-  {
-    title: "Nuevo negocio creado",
-    by: "María Pérez",
-    when: "hace 10 min",
-    detail: "Cafetería Don Pepe",
-  },
-  {
-    title: "Usuario invitado",
-    by: "Carlos Ruiz",
-    when: "hace 40 min",
-    detail: "cruiz@empresa.com",
-  },
-  {
-    title: "Aprobación completada",
-    by: "Sistema",
-    when: "hace 1 h",
-    detail: "Negocio #432",
-  },
-  {
-    title: "Notificación fallida",
-    by: "Webhook",
-    when: "hace 3 h",
-    detail: "/notify/order/981",
-  },
-];
+  const [paginationModel, setPaginationModel] = React.useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 5,
+  });
 
-const alertas = [
-  {
-    level: "Alta",
-    message: "3 notificaciones fallidas en la última hora",
-  },
-  {
-    level: "Media",
-    message: "2 verificaciones pendientes por vencer hoy",
-  },
-];
+  // Cargar datos desde el backend
+  const loadDashboard = React.useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const req: DashboardVentasRequest = {
+        usuarioNombre,
+        desde: desde ? new Date(desde) : undefined,
+        hasta: hasta ? new Date(hasta) : undefined,
+        page: 1,
+        pageSize: 100,
+      };
 
-// -----------------------------
-// PEQUEÑOS COMPONENTES
-// -----------------------------
-function StatCard({ label, value, delta, trend, icon }: any) {
-  const isUp = trend === "up";
+      const res: ServiceResponse<DashboardVentasResponse> = await sellService.getVentasDashboard(req);
+
+      if (res.status === 200 && res.data) {
+        setData(res.data);
+      } else {
+        setError(res.message || "Error al obtener las ventas");
+      }
+    } catch (err: any) {
+      setError(err.message ?? "Error inesperado al cargar el dashboard");
+    } finally {
+      setLoading(false);
+    }
+  }, [usuarioNombre, desde, hasta]);
+
+  React.useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  /* ================== RENDER ================== */
+  const kpis = React.useMemo(() => {
+    if (!data) return [];
+    return [
+      {
+        label: "Ventas",
+        value: String(data.totalVentas),
+        icon: <ShoppingCartIcon sx={{ color: "#60a5fa" }} />,
+      },
+      {
+        label: "Cobrado",
+        value: fmtCurrency(data.totalCobrado),
+        icon: <AttachMoneyIcon sx={{ color: "#34d399" }} />,
+      },
+      {
+        label: "Puntos generados",
+        value: data.puntosGenerados.toFixed(2),
+        icon: <PercentIcon sx={{ color: "#a78bfa" }} />,
+      },
+      {
+        label: "Ticket promedio",
+        value: fmtCurrency(data.ticketPromedio),
+        icon: <TrendingUpIcon sx={{ color: "#f59e0b" }} />,
+      },
+    ];
+  }, [data]);
+
+  const columns: GridColDef<VentaRowDto>[] = [
+    { field: "folio", headerName: "Folio", width: 110 },
+    { field: "articulo", headerName: "Artículo", width: 140 },
+    { field: "descripcion", headerName: "Descripción", flex: 1, minWidth: 160 },
+    {
+      field: "monto",
+      headerName: "Monto",
+      width: 140,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => fmtCurrency(p as number),
+    },
+    {
+      field: "puntosGenerados",
+      headerName: "Puntos",
+      width: 120,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => Number(p as number).toFixed(2),
+    },
+    {
+      field: "cobrado",
+      headerName: "Cobrado",
+      width: 140,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => fmtCurrency(p as number),
+    },
+    {
+      field: "creadoFecha",
+      headerName: "Fecha",
+      width: 160,
+      valueFormatter: (p) => fmtDate(p as string),
+    },
+  ];
+
+  const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
+
+  /* ================== Charts ================== */
+  const ventasPorDia = data?.ventasPorDia?.map((x) => ({
+    dia: x.dia, ventas: x.ventas,
+  })) ?? [];
+
+  const topArticulos = data?.topArticulos?.map((x, i) => ({
+    name: x.nombre, qty: x.cantidad, color: SOFT_COLORS[i % SOFT_COLORS.length],
+  })) ?? [];
+
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-      <Card className="rounded-2xl">
-        <CardContent className="p-5">
-          <div className="flex items-center justify-between">
-            <div className="text-muted-foreground">{label}</div>
-            <div className="opacity-70">{icon}</div>
-          </div>
-          <div className="mt-3 flex items-end gap-2">
-            <div className="text-3xl font-semibold leading-none">{value}</div>
-            <div
-              className={`flex items-center gap-1 text-sm ${
-                isUp ? "text-emerald-600" : "text-rose-600"
-              }`}
-            >
-              {isUp ? (
-                <ArrowUpRight className="h-4 w-4" />
-              ) : (
-                <ArrowDownRight className="h-4 w-4" />
-              )}
-              <span>{delta}</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
-
-function QuickActions() {
-  return (
-    <Card className="rounded-2xl">
-      <CardHeader>
-        <CardTitle>Acciones rápidas</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <Button className="justify-start" variant="secondary">
-            <Plus className="mr-2 h-4 w-4" /> Crear negocio
-          </Button>
-          <Button className="justify-start" variant="secondary">
-            <Users className="mr-2 h-4 w-4" /> Invitar usuario
-          </Button>
-          <Button className="justify-start" variant="secondary">
-            <Bell className="mr-2 h-4 w-4" /> Enviar notificación
-          </Button>
-          <Button className="justify-start" variant="secondary">
-            <CheckCircle2 className="mr-2 h-4 w-4" /> Revisar aprobaciones
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function AlertsPanel() {
-  return (
-    <Card className="rounded-2xl">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Alertas</CardTitle>
-        <AlertTriangle className="h-5 w-5 text-amber-500" />
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {alertas.map((a, i) => (
-          <div key={i} className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium">{a.message}</p>
-              <p className="text-xs text-muted-foreground">Prioridad {a.level}</p>
-            </div>
-            <Badge variant={a.level === "Alta" ? "destructive" : "secondary"}>
-              {a.level}
-            </Badge>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function RecentActivity() {
-  return (
-    <Card className="rounded-2xl">
-      <CardHeader>
-        <CardTitle>Actividad reciente</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {actividadReciente.map((a, i) => (
-          <div key={i} className="flex items-start justify-between">
-            <div>
-              <p className="text-sm font-medium leading-tight">{a.title}</p>
-              <p className="text-xs text-muted-foreground">
-                {a.detail} · {a.by} · {a.when}
-              </p>
-            </div>
-            <Button size="sm" variant="ghost">
-              Ver
-            </Button>
-          </div>
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function KpiCharts() {
-  return (
-    <Card className="rounded-2xl">
-      <CardHeader>
-        <CardTitle>Actividad semanal</CardTitle>
-      </CardHeader>
-      <CardContent className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <RLineChart data={lineData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Line type="monotone" dataKey="negocios" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="usuarios" strokeWidth={2} dot={false} />
-          </RLineChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ConversionChart() {
-  return (
-    <Card className="rounded-2xl">
-      <CardHeader>
-        <CardTitle>Conversión mensual</CardTitle>
-      </CardHeader>
-      <CardContent className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <RBarChart data={barData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip />
-            <Bar dataKey="conversion" radius={[8, 8, 0, 0]} />
-          </RBarChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
-  );
-}
-
-// -----------------------------
-// DASHBOARD
-// -----------------------------
-export default function Dashboard() {
-  return (
-    <div className="p-4 md:p-6 space-y-6">
-      {/* Encabezado */}
-      <div className="flex items-center justify-between">
+    <Box className="space-y-4">
+      {/* Header */}
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground">Bienvenido al panel.</p>
+          <Typography variant="h5" fontWeight={800} color="primary">
+            Dashboard de Ventas
+          </Typography>
+          <Typography color="text.secondary" fontSize={14}>
+            Filtra por fecha y revisa tus métricas
+          </Typography>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">Exportar</Button>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" /> Nuevo negocio
+        <Stack direction="row" spacing={1}>
+          <IconButton size="small" onClick={() => loadDashboard()}>
+            <RefreshIcon />
+          </IconButton>
+        </Stack>
+      </Stack>
+
+      {/* Filtros */}
+      <Paper sx={{ p: 2.5, borderRadius: 3 }}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
+          <TextField
+            label="Desde"
+            type="date"
+            InputLabelProps={{ shrink: true }}
+            value={desde}
+            onChange={(e) => setDesde(e.target.value)}
+          />
+          <TextField
+            label="Hasta"
+            type="date"
+            InputLabelProps={{ shrink: true }}
+            value={hasta}
+            onChange={(e) => setHasta(e.target.value)}
+          />
+          <Button
+            variant="contained"
+            onClick={loadDashboard}
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size={20} /> : "Filtrar"}
           </Button>
-        </div>
-      </div>
+        </Stack>
+      </Paper>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {kpis.map((k, i) => (
-          <StatCard key={i} {...k} />
-        ))}
-      </div>
+      {data && (
+        <Stack direction={{ xs: "column", md: "row" }} gap={2}>
+          {kpis.map((k, i) => (
+            <Paper key={i} sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography color="text.secondary">{k.label}</Typography>
+                {k.icon}
+              </Stack>
+              <Typography variant="h5" fontWeight={800} sx={{ mt: 1 }}>
+                {k.value}
+              </Typography>
+            </Paper>
+          ))}
+        </Stack>
+      )}
 
-      {/* Gráficas y pendientes */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-        <div className="xl:col-span-2 space-y-4">
-          <KpiCharts />
-          <ConversionChart />
-        </div>
-        <div className="space-y-4">
-          <QuickActions />
-          <AlertsPanel />
-        </div>
-      </div>
+      {/* Charts */}
+      <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
+        <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
+          <Typography fontWeight={800} color="primary">
+            Ventas por día
+          </Typography>
+          <Box sx={{ height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={ventasPorDia}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="dia" />
+                <YAxis />
+                <Tooltip />
+                <Line type="monotone" dataKey="ventas" stroke="#60a5fa" strokeWidth={2} dot />
+              </LineChart>
+            </ResponsiveContainer>
+          </Box>
+        </Paper>
 
-      {/* Actividad */}
-      <RecentActivity />
+        <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
+          <Typography fontWeight={800} color="primary">
+            Artículos más vendidos
+          </Typography>
+          <Box sx={{ height: 260 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={topArticulos}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                <YAxis />
+                <Tooltip />
+                <Bar dataKey="qty" radius={[6, 6, 0, 0]}>
+                  {topArticulos.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </Box>
+        </Paper>
+      </Stack>
 
-      {/* Notas para devs */}
-      <div className="text-xs text-muted-foreground">
-        <p>
-          <strong>Integración rápida:</strong> sustituye los arreglos <code>kpis</code>,
-          <code>lineData</code>, <code>barData</code> y <code>actividadReciente</code> por
-          datos de tus endpoints. Este archivo es un componente React de una sola
-          vista listo para usarse con Tailwind, shadcn/ui, Lucide y Recharts.
-        </p>
-      </div>
-    </div>
+      {/* Tabla */}
+      <Paper sx={{ p: 2.5, borderRadius: 3 }}>
+        <Typography variant="h6" fontWeight={800} color="primary" sx={{ mb: 1 }}>
+          Ventas recientes
+        </Typography>
+        <Divider sx={{ mb: 2 }} />
+        {error && (
+          <Typography color="error" mb={2}>{error}</Typography>
+        )}
+        {loading ? (
+          <Box display="flex" justifyContent="center" py={6}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <Box sx={{ height: dynamicHeight, width: "100%" }}>
+            <DataGrid
+              rows={data?.rows ?? []}
+              columns={columns}
+              getRowId={(r) => r.folio}
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
+              disableRowSelectionOnClick
+              pageSizeOptions={[5, 10, 20, 50]}
+              sx={{
+                borderRadius: 3,
+                "& .MuiDataGrid-columnHeaders": {
+                  backgroundColor: "action.hover",
+                  fontWeight: 700,
+                },
+                "& .MuiDataGrid-row:nth-of-type(even)": {
+                  backgroundColor: "#ffffff",
+                },
+                "& .MuiDataGrid-row:nth-of-type(odd)": {
+                  backgroundColor: "rgba(14,165,233,0.06)",
+                },
+                "& .MuiDataGrid-row:hover": {
+                  backgroundColor: "rgba(14,165,233,0.12) !important",
+                },
+              }}
+            />
+          </Box>
+        )}
+      </Paper>
+    </Box>
   );
 }
