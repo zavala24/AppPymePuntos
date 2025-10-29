@@ -12,10 +12,10 @@ import {
   Alert,
   Chip,
   IconButton,
+  Tooltip,
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import ImageIcon from "@mui/icons-material/Image";
-import DeleteIcon from "@mui/icons-material/Delete";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
 
@@ -29,7 +29,7 @@ const notiService: INotificacionService = new NotificacionService(
   new NotificacionRepository()
 );
 
-// -------- helpers: negocio/usuario actual --------
+/* ===================== helpers auth/ls ===================== */
 function getClaim<T = any>(key: string): T | null {
   const token = localStorage.getItem("pa_token");
   if (!token) return null;
@@ -40,19 +40,14 @@ function getClaim<T = any>(key: string): T | null {
     return null;
   }
 }
-function getIdNegocioActual(): number | null {
-  const ls = localStorage.getItem("pa_idNegocio");
-  if (ls && !Number.isNaN(Number(ls))) return Number(ls);
-  const claim = getClaim<number>("idNegocio");
-  return typeof claim === "number" ? claim : null;
-}
+
 function getIdUsuarioActual(): number | null {
-  // ✅ clave correcta en LS
   const ls = localStorage.getItem("pa_idUsuario");
   if (ls && !Number.isNaN(Number(ls))) return Number(ls);
   const claim = getClaim<number>("idUsuario");
   return typeof claim === "number" ? claim : null;
 }
+
 function getUsuarioNombre(): string {
   return (
     localStorage.getItem("pa_user") ||
@@ -61,15 +56,11 @@ function getUsuarioNombre(): string {
     "Usuario"
   );
 }
-function getNegocioNombre(): string {
-  return (
-    localStorage.getItem("pa_negocioNombre") ||
-    (getClaim<string>("negocioNombre") ?? "")
-  );
-}
+
 function getNegocioLogo(): string | null {
   return localStorage.getItem("pa_logoUrl") || (getClaim<string>("urlLogo") ?? null);
 }
+
 function formatDate(iso: string) {
   const d = new Date(iso);
   const dd = String(d.getDate()).padStart(2, "0");
@@ -80,6 +71,7 @@ function formatDate(iso: string) {
   return `${dd}/${mm}/${yyyy} ${hh}:${mi}`;
 }
 
+/* ===================== tipos ===================== */
 type GridRow = {
   id: number;
   title: string;
@@ -88,13 +80,13 @@ type GridRow = {
   createdAt: string;
 };
 
+/* ===================== componente ===================== */
 export default function NotificacionesPage() {
-  const idNegocio = getIdNegocioActual(); // solo para cargar listados
-  const idUsuario = getIdUsuarioActual();
+  const idUsuario = getIdUsuarioActual(); // (por si lo necesitas para validaciones futuras)
   const usuarioNombre = getUsuarioNombre();
   const negocioLogo = getNegocioLogo();
 
-  // -------- grid --------
+  // grid
   const [rows, setRows] = useState<GridRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState("");
@@ -103,12 +95,13 @@ export default function NotificacionesPage() {
     page: 0,
     pageSize: 5,
   });
+
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query.trim().toLowerCase()), 300);
     return () => clearTimeout(t);
   }, [query]);
 
-  // -------- form --------
+  // form
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -120,7 +113,7 @@ export default function NotificacionesPage() {
     setImageUrl("");
   };
 
-  // -------- toast --------
+  // toast
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     msg: string;
@@ -129,7 +122,7 @@ export default function NotificacionesPage() {
   const showToast = (msg: string, type: "success" | "error") =>
     setSnackbar({ open: true, msg, type });
 
-  // -------- validación (no exige idUsuario para habilitar botón) --------
+  // validación
   const TITLE_MAX = 60;
   const BODY_MAX = 240;
   const canSend =
@@ -138,13 +131,12 @@ export default function NotificacionesPage() {
     title.trim().length <= TITLE_MAX &&
     body.trim().length <= BODY_MAX;
 
-  // -------- cargar notificaciones --------
+  // cargar notificaciones por usuario
   const loadNotificaciones = useCallback(async () => {
-
-      if (!usuarioNombre) {
-        setRows([]);
-        return;
-      }
+    if (!usuarioNombre) {
+      setRows([]);
+      return;
+    }
 
     try {
       setLoading(true);
@@ -168,13 +160,13 @@ export default function NotificacionesPage() {
     } finally {
       setLoading(false);
     }
-  }, [idNegocio]);
+  }, [usuarioNombre]);
 
   useEffect(() => {
     loadNotificaciones();
   }, [loadNotificaciones]);
 
-  // -------- enviar --------
+  // enviar
   const handleSend = async () => {
     if (!canSend) return;
 
@@ -185,11 +177,11 @@ export default function NotificacionesPage() {
         titulo: title.trim(),
         cuerpo: body.trim(),
         urlLogo: imageUrl.trim() || null,
-        creadoPor: usuarioNombre || "admin"
+        creadoPor: usuarioNombre || "admin",
       };
 
       const resp = await notiService.sendNotification(dto);
-      if (resp.status === 200) {
+      if (resp.status === 201) {
         showToast(resp.message || "Notificación enviada.", "success");
         resetForm();
         await loadNotificaciones();
@@ -204,14 +196,7 @@ export default function NotificacionesPage() {
     }
   };
 
-  // -------- eliminar local (solo UI) --------
-  const removeRow = (id: number) => {
-    if (confirm("¿Eliminar esta notificación de la lista (solo local)?")) {
-      setRows((prev) => prev.filter((r) => r.id !== id));
-    }
-  };
-
-  // -------- filtrado --------
+  // filtro grid
   const filtered = useMemo(() => {
     if (!debouncedQuery) return rows;
     return rows.filter(
@@ -221,52 +206,46 @@ export default function NotificacionesPage() {
     );
   }, [rows, debouncedQuery]);
 
-  // -------- columnas --------
-const columns: GridColDef<GridRow>[] = [
-  {
-    field: "title",
-    headerName: "Título",
-    flex: 1,
-    renderCell: (p) => (
-      <Chip
-        size="small"
-        color="primary"
-        label={String(p.value)}
-        sx={{ fontWeight: 600 }}
-      />
-    ),
-  },
-  {
-    field: "body",
-    headerName: "Cuerpo",
-    flex: 2,
-    renderCell: (p) => (
-      <Typography
-        variant="body2"
-        title={String(p.value || "")}
-        sx={{
-          color: "text.secondary",
-          display: "flex",
-          alignItems: "center",
-          height: "100%",
-          whiteSpace: "nowrap",
-          overflow: "hidden",
-          textOverflow: "ellipsis",
-        }}
-      >
-        {String(p.value || "")}
-      </Typography>
-    ),
-  },
-  {
-    field: "createdAt",
-    headerName: "Fecha",
-    width: 170,
-    align: "center",
-    headerAlign: "center",
-  },
-];
-
+  // columnas grid (solo Título, Cuerpo, Fecha)
+  const columns: GridColDef<GridRow>[] = [
+    {
+      field: "title",
+      headerName: "Título",
+      flex: 1,
+      renderCell: (p) => (
+        <Chip size="small" color="primary" label={String(p.value)} sx={{ fontWeight: 600 }} />
+      ),
+    },
+    {
+      field: "body",
+      headerName: "Cuerpo",
+      flex: 2,
+      renderCell: (p) => (
+        <Typography
+          variant="body2"
+          title={String(p.value || "")}
+          sx={{
+            color: "text.secondary",
+            display: "flex",
+            alignItems: "center",
+            height: "100%",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+        >
+          {String(p.value || "")}
+        </Typography>
+      ),
+    },
+    {
+      field: "createdAt",
+      headerName: "Fecha",
+      width: 170,
+      align: "center",
+      headerAlign: "center",
+    },
+  ];
 
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
@@ -283,7 +262,14 @@ const columns: GridColDef<GridRow>[] = [
               Redacta y envía promociones a los seguidores del negocio.
             </Typography>
           </div>
-          <Button startIcon={<RefreshIcon />} variant="outlined" onClick={() => setQuery("")}>
+          <Button
+            startIcon={<RefreshIcon />}
+            variant="outlined"
+            onClick={() => {
+              setQuery("");
+              resetForm();
+            }}
+          >
             Limpiar filtro
           </Button>
         </Stack>
@@ -334,7 +320,7 @@ const columns: GridColDef<GridRow>[] = [
             </Stack>
           </Paper>
 
-          {/* Preview (sin “Mi negocio” y logo más pequeño) */}
+          {/* Preview */}
           <Paper className="p-4 w-full md:w-96 border border-blue-100 rounded-xl">
             <Typography fontWeight={700} color="text.secondary" fontSize={13} mb={1}>
               Previsualización
@@ -406,22 +392,44 @@ const columns: GridColDef<GridRow>[] = [
           Enviadas
         </Typography>
         <Divider sx={{ mb: 2 }} />
-        <TextField
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPaginationModel((m) => ({ ...m, page: 0 }));
-          }}
-          placeholder="Buscar título o contenido…"
-          size="small"
-          fullWidth
-          sx={{
-            mb: 3,
-            maxWidth: { xs: "100%", md: 720 },
-            "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
-            "& .MuiOutlinedInput-input": { lineHeight: "44px" },
-          }}
-        />
+
+        {/* Buscador + Refresh (solo grid) */}
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          sx={{ mb: 3, maxWidth: { xs: "100%", md: 720 } }}
+        >
+          <TextField
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPaginationModel((m) => ({ ...m, page: 0 }));
+            }}
+            placeholder="Buscar título o contenido…"
+            size="small"
+            fullWidth
+            sx={{
+              "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
+              "& .MuiOutlinedInput-input": { lineHeight: "44px" },
+            }}
+          />
+          <Tooltip title="Refrescar" arrow>
+            <IconButton
+              onClick={loadNotificaciones}
+              disabled={loading}
+              sx={{
+                ml: 1,
+                color: "primary.main",
+                backgroundColor: "transparent",
+                "&:hover": { backgroundColor: "transparent", color: "primary.dark" },
+              }}
+            >
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+        </Stack>
+
         <Box sx={{ height: dynamicHeight, width: "100%" }}>
           <DataGrid
             rows={filtered}

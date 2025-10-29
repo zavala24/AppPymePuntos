@@ -7,7 +7,6 @@ import {
   Divider,
   IconButton,
   Button,
-  TextField,
   CircularProgress,
 } from "@mui/material";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -21,22 +20,31 @@ import {
   XAxis,
   YAxis,
   CartesianGrid,
-  Tooltip,
   LineChart,
   Line,
   ResponsiveContainer,
   Cell,
+  Tooltip,
 } from "recharts";
 import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
+
+// Date pickers (MUI X) + dayjs
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import dayjs, { Dayjs } from "dayjs";
+import "dayjs/locale/es";
 
 // Services
 import { SellRepository } from "@/infrastructure/repositories/SellRepository";
 import { SellService } from "@/application/services/SellService";
-import {
-
-} from "@/domain/repositories/ISellRepository";
 import { ServiceResponse } from "@/shared/types/service-response";
-import { DashboardVentasRequest, DashboardVentasResponse, VentaRowDto } from "@/application/dtos/ventas/DashboardVentasDto";
+import {
+  DashboardVentasRequest,
+  DashboardVentasResponse,
+  VentaRowDto,
+} from "@/application/dtos/ventas/DashboardVentasDto";
+import MuiTooltip from "@mui/material/Tooltip";
 
 const sellService = new SellService(new SellRepository());
 
@@ -50,24 +58,33 @@ function fmtDate(iso: string) {
 }
 
 const SOFT_COLORS = [
-  "#60a5fa", "#34d399", "#f59e0b", "#f472b6",
-  "#a78bfa", "#fb7185", "#22d3ee", "#86efac",
+  "#60a5fa",
+  "#34d399",
+  "#f59e0b",
+  "#f472b6",
+  "#a78bfa",
+  "#fb7185",
+  "#22d3ee",
+  "#86efac",
 ];
 
 /* ============ Componente principal ============ */
 export default function DashboardPage() {
   const usuarioNombre = localStorage.getItem("pa_user") || "";
-  const [desde, setDesde] = React.useState<string>("");
-  const [hasta, setHasta] = React.useState<string>("");
+
+  // Filtros con DatePicker (Dayjs)
+  const [desde, setDesde] = React.useState<Dayjs | null>(null);
+  const [hasta, setHasta] = React.useState<Dayjs | null>(null);
 
   const [data, setData] = React.useState<DashboardVentasResponse | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [paginationModel, setPaginationModel] = React.useState<GridPaginationModel>({
-    page: 0,
-    pageSize: 5,
-  });
+  const [paginationModel, setPaginationModel] =
+    React.useState<GridPaginationModel>({
+      page: 0,
+      pageSize: 5,
+    });
 
   // Cargar datos desde el backend
   const loadDashboard = React.useCallback(async () => {
@@ -76,13 +93,14 @@ export default function DashboardPage() {
     try {
       const req: DashboardVentasRequest = {
         usuarioNombre,
-        desde: desde ? new Date(desde) : undefined,
-        hasta: hasta ? new Date(hasta) : undefined,
+        desde: desde ? desde.toDate() : undefined,
+        hasta: hasta ? hasta.toDate() : undefined,
         page: 1,
         pageSize: 100,
       };
 
-      const res: ServiceResponse<DashboardVentasResponse> = await sellService.getVentasDashboard(req);
+      const res: ServiceResponse<DashboardVentasResponse> =
+        await sellService.getVentasDashboard(req);
 
       if (res.status === 200 && res.data) {
         setData(res.data);
@@ -166,86 +184,140 @@ export default function DashboardPage() {
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
   /* ================== Charts ================== */
-  const ventasPorDia = data?.ventasPorDia?.map((x) => ({
-    dia: x.dia, ventas: x.ventas,
-  })) ?? [];
+  const ventasPorDia =
+    data?.ventasPorDia?.map((x) => ({
+      dia: x.dia,
+      ventas: x.ventas,
+    })) ?? [];
 
-  const topArticulos = data?.topArticulos?.map((x, i) => ({
-    name: x.nombre, qty: x.cantidad, color: SOFT_COLORS[i % SOFT_COLORS.length],
-  })) ?? [];
+  const topArticulos =
+    data?.topArticulos?.map((x, i) => ({
+      name: x.nombre,
+      qty: x.cantidad,
+      color: SOFT_COLORS[i % SOFT_COLORS.length],
+    })) ?? [];
 
   return (
-    <Box className="space-y-4">
-      {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <div>
-          <Typography variant="h5" fontWeight={800} color="primary">
-            Dashboard de Ventas
-          </Typography>
-          <Typography color="text.secondary" fontSize={14}>
-            Filtra por fecha y revisa tus métricas
-          </Typography>
-        </div>
-        <Stack direction="row" spacing={1}>
-          <IconButton size="small" onClick={() => loadDashboard()}>
-            <RefreshIcon />
-          </IconButton>
-        </Stack>
-      </Stack>
+    <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
+      <Box className="space-y-4">
+        {/* Header */}
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <div>
+            <Typography variant="h5" fontWeight={800} color="primary">
+              Dashboard de Ventas
+            </Typography>
+            <Typography color="text.secondary" fontSize={14}>
+              Filtra por fecha y revisa tus métricas
+            </Typography>
+          </div>
+          <Stack direction="row" spacing={1}>
+            <MuiTooltip title="Refrescar" arrow>
+              <IconButton
+                size="small"
+                onClick={() => loadDashboard()}
+                aria-label="Refrescar"
+                sx={{
+                  ml: 1,
+                  color: "primary.main",
+                  backgroundColor: "transparent",
+                  "&:hover": { backgroundColor: "transparent", color: "primary.dark" },
+                }}
+              >
+                <RefreshIcon />
+              </IconButton>
+            </MuiTooltip>
+          </Stack>
 
-      {/* Filtros */}
-      <Paper sx={{ p: 2.5, borderRadius: 3 }}>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
-          <TextField
-            label="Desde"
-            type="date"
-            InputLabelProps={{ shrink: true }}
-            value={desde}
-            onChange={(e) => setDesde(e.target.value)}
-          />
-          <TextField
-            label="Hasta"
-            type="date"
-            InputLabelProps={{ shrink: true }}
-            value={hasta}
-            onChange={(e) => setHasta(e.target.value)}
-          />
-          <Button
-            variant="contained"
-            onClick={loadDashboard}
-            disabled={loading}
+        </Stack>
+
+        {/* Filtros (DatePicker bonitos) */}
+        <Paper sx={{ p: 2.5, borderRadius: 3 }}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={2}
+            alignItems={{ xs: "stretch", sm: "center" }}
           >
-            {loading ? <CircularProgress size={20} /> : "Filtrar"}
-          </Button>
-        </Stack>
-      </Paper>
+            <DatePicker
+              label="Desde"
+              value={desde}
+              onChange={(v) => setDesde(v)}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
+                },
+              }}
+            />
+            <DatePicker
+              label="Hasta"
+              value={hasta}
+              onChange={(v) => setHasta(v)}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
+                },
+              }}
+            />
+            <Stack direction="row" spacing={1}>
+              <Button
+                variant="contained"
+                onClick={loadDashboard}
+                disabled={loading}
+                sx={{ borderRadius: 2, px: 3 }}
+              >
+                {loading ? <CircularProgress size={20} /> : "Filtrar"}
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={() => {
+                  setDesde(null);
+                  setHasta(null);
+                  loadDashboard();
+                }}
+                sx={{ borderRadius: 2 }}
+              >
+                Limpiar
+              </Button>
+            </Stack>
+          </Stack>
+        </Paper>
 
-      {/* KPIs */}
-      {data && (
-        <Stack direction={{ xs: "column", md: "row" }} gap={2}>
-          {kpis.map((k, i) => (
-            <Paper key={i} sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Typography color="text.secondary">{k.label}</Typography>
-                {k.icon}
-              </Stack>
-              <Typography variant="h5" fontWeight={800} sx={{ mt: 1 }}>
-                {k.value}
-              </Typography>
-            </Paper>
-          ))}
-        </Stack>
-      )}
+        {/* KPIs */}
+        {data && (
+          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
+            {kpis.map((k, i) => (
+              <Paper key={i} sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="space-between"
+                >
+                  <Typography color="text.secondary">{k.label}</Typography>
+                  {k.icon}
+                </Stack>
+                <Typography variant="h5" fontWeight={800} sx={{ mt: 1 }}>
+                  {k.value}
+                </Typography>
+              </Paper>
+            ))}
+          </Stack>
+        )}
 
-      {/* Charts */}
-      <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
+        {/* Charts */}
+        <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
         <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
           <Typography fontWeight={800} color="primary">
             Ventas por día
           </Typography>
-          <Box sx={{ height: 260 }}>
+          <Typography variant="caption" color="text.secondary">
+            Últimos resultados por fecha
+          </Typography>
+
+          {/* margen arriba + altura */}
+          <Box sx={{ mt: 1.5, height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={ventasPorDia}>
+              <LineChart data={ventasPorDia} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="dia" />
                 <YAxis />
@@ -260,9 +332,14 @@ export default function DashboardPage() {
           <Typography fontWeight={800} color="primary">
             Artículos más vendidos
           </Typography>
-          <Box sx={{ height: 260 }}>
+          <Typography variant="caption" color="text.secondary">
+            Top por cantidad
+          </Typography>
+
+          {/* margen arriba + altura */}
+          <Box sx={{ mt: 1.5, height: 260 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topArticulos}>
+              <BarChart data={topArticulos} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis />
@@ -276,51 +353,53 @@ export default function DashboardPage() {
             </ResponsiveContainer>
           </Box>
         </Paper>
-      </Stack>
+        </Stack>
 
-      {/* Tabla */}
-      <Paper sx={{ p: 2.5, borderRadius: 3 }}>
-        <Typography variant="h6" fontWeight={800} color="primary" sx={{ mb: 1 }}>
-          Ventas recientes
-        </Typography>
-        <Divider sx={{ mb: 2 }} />
-        {error && (
-          <Typography color="error" mb={2}>{error}</Typography>
-        )}
-        {loading ? (
-          <Box display="flex" justifyContent="center" py={6}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <Box sx={{ height: dynamicHeight, width: "100%" }}>
-            <DataGrid
-              rows={data?.rows ?? []}
-              columns={columns}
-              getRowId={(r) => r.folio}
-              paginationModel={paginationModel}
-              onPaginationModelChange={setPaginationModel}
-              disableRowSelectionOnClick
-              pageSizeOptions={[5, 10, 20, 50]}
-              sx={{
-                borderRadius: 3,
-                "& .MuiDataGrid-columnHeaders": {
-                  backgroundColor: "action.hover",
-                  fontWeight: 700,
-                },
-                "& .MuiDataGrid-row:nth-of-type(even)": {
-                  backgroundColor: "#ffffff",
-                },
-                "& .MuiDataGrid-row:nth-of-type(odd)": {
-                  backgroundColor: "rgba(14,165,233,0.06)",
-                },
-                "& .MuiDataGrid-row:hover": {
-                  backgroundColor: "rgba(14,165,233,0.12) !important",
-                },
-              }}
-            />
-          </Box>
-        )}
-      </Paper>
-    </Box>
+        {/* Tabla */}
+        <Paper sx={{ p: 2.5, borderRadius: 3 }}>
+          <Typography variant="h6" fontWeight={800} color="primary" sx={{ mb: 1 }}>
+            Ventas recientes
+          </Typography>
+          <Divider sx={{ mb: 2 }} />
+          {error && <Typography color="error" mb={2}>{error}</Typography>}
+          {loading ? (
+            <Box display="flex" justifyContent="center" py={6}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Box sx={{ height: dynamicHeight, width: "100%" }}>
+              <DataGrid
+                rows={data?.rows ?? []}
+                columns={columns}
+                getRowId={(r) => r.folio}
+                paginationModel={paginationModel}
+                onPaginationModelChange={setPaginationModel}
+                disableRowSelectionOnClick
+                pageSizeOptions={[5, 10, 20, 50]}
+                sx={{
+                  borderRadius: 3,
+                  "& .MuiDataGrid-columnHeaders": {
+                    backgroundColor: "action.hover",
+                    fontWeight: 700,
+                  },
+                  "& .MuiDataGrid-row:nth-of-type(even)": {
+                    backgroundColor: "#ffffff",
+                  },
+                  "& .MuiDataGrid-row:nth-of-type(odd)": {
+                    backgroundColor: "rgba(14,165,233,0.06)",
+                  },
+                  "& .MuiDataGrid-row:hover": {
+                    backgroundColor: "rgba(14,165,233,0.12) !important",
+                  },
+                  "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
+                    outline: "none",
+                  },
+                }}
+              />
+            </Box>
+          )}
+        </Paper>
+      </Box>
+    </LocalizationProvider>
   );
 }

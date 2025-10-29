@@ -1,20 +1,24 @@
-// src/shared/router/RequireRole.tsx
-import * as React from "react";
+// shared/router/RequireRole.tsx
+import { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 
-type Props = {
-  allow: string[];              // ["SuperAdmin"]
-  children: React.ReactNode;
-};
+type Props = { allow: string[]; children: ReactNode };
 
 export default function RequireRole({ allow, children }: Props) {
   const location = useLocation();
-  const role = (localStorage.getItem("pa_role") || "").toLowerCase();
-  const allowed = allow.map(r => r.toLowerCase());
+  const role = (localStorage.getItem("pa_role") || "").trim();
 
-  if (!allowed.includes(role)) {
-    // Opcional: podrías guardar a dónde intentó entrar con state.from
-    return <Navigate to="/unauthorized" state={{ from: location }} replace />;
-  }
-  return <>{children}</>;
+  // normaliza: "Admin" -> "admin"
+  const hasAccess = allow.map(a => a.toLowerCase()).includes(role.toLowerCase());
+
+  if (hasAccess) return <>{children}</>;
+
+  // Importante: NO mandes a "/" para evitar el loop con el index->/dashboard
+  return (
+    <Navigate
+      to="/acceso-denegado"
+      replace
+      state={{ from: location.pathname }}
+    />
+  );
 }

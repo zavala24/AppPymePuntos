@@ -17,6 +17,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Tooltip,
+  IconButton,
 } from "@mui/material";
 import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
@@ -32,7 +34,7 @@ import { UserService } from "@/application/services/UserService";
 import type { IUserService } from "@/application/services/IUserService";
 import { UsuarioPorNegocioDto } from "@/application/dtos/usuario/UsuarioPorNegocioDto";
 import { UpsertUsuarioDeNegocioDto } from "@/application/dtos/usuario/UpsertUsuarioDeNegocioDto";
-
+import RefreshIcon from "@mui/icons-material/Refresh";
 // ---------- helpers ----------
 const userService: IUserService = new UserService(new UserRepository());
 
@@ -320,7 +322,7 @@ export default function MisUsuariosPage() {
           }}
         >
           <TextField
-            label="Usuario *"
+            label="Usuario"
             value={form.usuarioNombre}
             onChange={(e) => setForm((f) => ({ ...f, usuarioNombre: e.target.value }))}
             required
@@ -423,19 +425,37 @@ export default function MisUsuariosPage() {
         </Typography>
         <Divider sx={{ mb: 2 }} />
 
-        <TextField
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por nombre, usuario, email..."
-          size="small"
-          fullWidth
-          sx={{
-            mb: 3,
-            maxWidth: { xs: "100%", md: 720 },
-            "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
-            "& .MuiOutlinedInput-input": { lineHeight: "44px" },
-          }}
-        />
+        {/* 🔹 Buscador + botón Refrescar */}
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1.5}
+          sx={{ mb: 3, maxWidth: { xs: "100%", md: 720 } }}
+        >
+          <TextField
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por nombre, usuario, email..."
+            size="small"
+            fullWidth
+            sx={{
+              "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
+              "& .MuiOutlinedInput-input": { lineHeight: "44px" },
+            }}
+          />
+          <Tooltip title="Refrescar" arrow>
+            <IconButton
+              color="primary"
+              onClick={() => load()}
+              disabled={loading}
+              sx={{
+                "&:hover": { backgroundColor: "primary.light", color: "#fff" },
+              }}
+            >
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+        </Stack>
 
         <Box sx={{ height: dynamicHeight, width: "100%" }}>
           <DataGrid
@@ -460,19 +480,27 @@ export default function MisUsuariosPage() {
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[5, 10, 20, 50]}
-            getRowClassName={(p) => (p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd")}
+            getRowClassName={(p) =>
+              p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd"
+            }
             sx={{
               borderRadius: 3,
-              "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
+              "& .MuiDataGrid-columnHeaders": {
+                backgroundColor: "action.hover",
+                fontWeight: 700,
+              },
               "& .row-even": { backgroundColor: "#ffffff" },
               "& .row-odd": { backgroundColor: "rgba(14,165,233,0.06)" },
-              "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.12) !important" },
-              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
+              "& .MuiDataGrid-row:hover": {
+                backgroundColor: "rgba(14,165,233,0.12) !important",
+              },
+              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
+                outline: "none",
+              },
             }}
           />
         </Box>
       </Paper>
-
       {/* DIALOG ELIMINAR */}
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Eliminar usuario</DialogTitle>
