@@ -9,11 +9,15 @@ import {
   Button,
   CircularProgress,
 } from "@mui/material";
+import MuiTooltip from "@mui/material/Tooltip";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import PercentIcon from "@mui/icons-material/Percent";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
+import DownloadIcon from "@mui/icons-material/Download";
+import ImageIcon from "@mui/icons-material/Image";
+import PolylineIcon from "@mui/icons-material/Polyline";
 import {
   BarChart,
   Bar,
@@ -35,6 +39,10 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import dayjs, { Dayjs } from "dayjs";
 import "dayjs/locale/es";
 
+// Excel / Imagen
+import * as XLSX from "xlsx";
+import * as htmlToImage from "html-to-image";
+
 // Services
 import { SellRepository } from "@/infrastructure/repositories/SellRepository";
 import { SellService } from "@/application/services/SellService";
@@ -44,7 +52,6 @@ import {
   DashboardVentasResponse,
   VentaRowDto,
 } from "@/application/dtos/ventas/DashboardVentasDto";
-import MuiTooltip from "@mui/material/Tooltip";
 
 const sellService = new SellService(new SellRepository());
 
@@ -56,17 +63,17 @@ function fmtDate(iso: string) {
   const d = new Date(iso);
   return d.toLocaleString("es-MX", { dateStyle: "medium" });
 }
+function niceBtn() {
+  return {
+    borderRadius: 2,
+    textTransform: "none",
+    px: 1.5,
+    minWidth: 0,
+    height: 32,
+  };
+}
 
-const SOFT_COLORS = [
-  "#60a5fa",
-  "#34d399",
-  "#f59e0b",
-  "#f472b6",
-  "#a78bfa",
-  "#fb7185",
-  "#22d3ee",
-  "#86efac",
-];
+const SOFT_COLORS = ["#60a5fa", "#34d399", "#f59e0b", "#f472b6", "#a78bfa", "#fb7185", "#22d3ee", "#86efac"];
 
 /* ============ Componente principal ============ */
 export default function DashboardPage() {
@@ -80,11 +87,14 @@ export default function DashboardPage() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [paginationModel, setPaginationModel] =
-    React.useState<GridPaginationModel>({
-      page: 0,
-      pageSize: 5,
-    });
+  const [paginationModel, setPaginationModel] = React.useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 5,
+  });
+
+  // Refs para capturar las gráficas
+  const ventasDiaRef = React.useRef<HTMLDivElement>(null);
+  const topArtRef = React.useRef<HTMLDivElement>(null);
 
   // Cargar datos desde el backend
   const loadDashboard = React.useCallback(async () => {
@@ -99,8 +109,7 @@ export default function DashboardPage() {
         pageSize: 100,
       };
 
-      const res: ServiceResponse<DashboardVentasResponse> =
-        await sellService.getVentasDashboard(req);
+      const res: ServiceResponse<DashboardVentasResponse> = await sellService.getVentasDashboard(req);
 
       if (res.status === 200 && res.data) {
         setData(res.data);
@@ -122,26 +131,10 @@ export default function DashboardPage() {
   const kpis = React.useMemo(() => {
     if (!data) return [];
     return [
-      {
-        label: "Ventas",
-        value: String(data.totalVentas),
-        icon: <ShoppingCartIcon sx={{ color: "#60a5fa" }} />,
-      },
-      {
-        label: "Cobrado",
-        value: fmtCurrency(data.totalCobrado),
-        icon: <AttachMoneyIcon sx={{ color: "#34d399" }} />,
-      },
-      {
-        label: "Puntos generados",
-        value: data.puntosGenerados.toFixed(2),
-        icon: <PercentIcon sx={{ color: "#a78bfa" }} />,
-      },
-      {
-        label: "Ticket promedio",
-        value: fmtCurrency(data.ticketPromedio),
-        icon: <TrendingUpIcon sx={{ color: "#f59e0b" }} />,
-      },
+      { label: "Ventas", value: String(data.totalVentas), icon: <ShoppingCartIcon sx={{ color: "#60a5fa" }} /> },
+      { label: "Cobrado", value: fmtCurrency(data.totalCobrado), icon: <AttachMoneyIcon sx={{ color: "#34d399" }} /> },
+      { label: "Puntos generados", value: data.puntosGenerados.toFixed(2), icon: <PercentIcon sx={{ color: "#a78bfa" }} /> },
+      { label: "Ticket promedio", value: fmtCurrency(data.ticketPromedio), icon: <TrendingUpIcon sx={{ color: "#f59e0b" }} /> },
     ];
   }, [data]);
 
@@ -149,53 +142,70 @@ export default function DashboardPage() {
     { field: "folio", headerName: "Folio", width: 110 },
     { field: "articulo", headerName: "Artículo", width: 140 },
     { field: "descripcion", headerName: "Descripción", flex: 1, minWidth: 160 },
-    {
-      field: "monto",
-      headerName: "Monto",
-      width: 140,
-      align: "center",
-      headerAlign: "center",
-      valueFormatter: (p) => fmtCurrency(p as number),
-    },
-    {
-      field: "puntosGenerados",
-      headerName: "Puntos",
-      width: 120,
-      align: "center",
-      headerAlign: "center",
-      valueFormatter: (p) => Number(p as number).toFixed(2),
-    },
-    {
-      field: "cobrado",
-      headerName: "Cobrado",
-      width: 140,
-      align: "center",
-      headerAlign: "center",
-      valueFormatter: (p) => fmtCurrency(p as number),
-    },
-    {
-      field: "creadoFecha",
-      headerName: "Fecha",
-      width: 160,
-      valueFormatter: (p) => fmtDate(p as string),
-    },
+    { field: "monto", headerName: "Monto", width: 140, align: "center", headerAlign: "center", valueFormatter: (p) => fmtCurrency(p as number) },
+    { field: "puntosGenerados", headerName: "Puntos", width: 120, align: "center", headerAlign: "center", valueFormatter: (p) => Number(p as number).toFixed(2) },
+    { field: "cobrado", headerName: "Cobrado", width: 140, align: "center", headerAlign: "center", valueFormatter: (p) => fmtCurrency(p as number) },
+    { field: "creadoFecha", headerName: "Fecha", width: 160, valueFormatter: (p) => fmtDate(p as string) },
   ];
 
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
   /* ================== Charts ================== */
-  const ventasPorDia =
-    data?.ventasPorDia?.map((x) => ({
-      dia: x.dia,
-      ventas: x.ventas,
-    })) ?? [];
+  const ventasPorDia = data?.ventasPorDia?.map((x) => ({ dia: x.dia, ventas: x.ventas })) ?? [];
+  const topArticulos = data?.topArticulos?.map((x, i) => ({ name: x.nombre, qty: x.cantidad, color: SOFT_COLORS[i % SOFT_COLORS.length] })) ?? [];
 
-  const topArticulos =
-    data?.topArticulos?.map((x, i) => ({
-      name: x.nombre,
-      qty: x.cantidad,
-      color: SOFT_COLORS[i % SOFT_COLORS.length],
-    })) ?? [];
+  /* ================== EXPORT HELPERS ================== */
+  // Excel (genérico)
+  const exportSheet = (sheets: { name: string; rows: any[] }[], fileName: string) => {
+    const wb = XLSX.utils.book_new();
+    sheets.forEach((s) => {
+      const ws = XLSX.utils.json_to_sheet(s.rows);
+      XLSX.utils.book_append_sheet(wb, ws, s.name.slice(0, 31));
+    });
+    XLSX.writeFile(wb, fileName.endsWith(".xlsx") ? fileName : `${fileName}.xlsx`);
+  };
+
+  // Excel: Ventas por día
+  const onExportVentasDiaXlsx = () => {
+    const rows = ventasPorDia.map((r) => ({ Dia: r.dia, Ventas: r.ventas }));
+    exportSheet([{ name: "Ventas_por_dia", rows }], `ventas_por_dia_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // Excel: Top artículos
+  const onExportTopArtXlsx = () => {
+    const rows = topArticulos.map((r) => ({ Articulo: r.name, Cantidad: r.qty }));
+    exportSheet([{ name: "Top_articulos", rows }], `top_articulos_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  // PNG (genérico, usa html-to-image)
+  const savePng = async (ref: React.RefObject<HTMLElement>, name: string) => {
+    if (!ref.current) return;
+    const dataUrl = await htmlToImage.toPng(ref.current, { pixelRatio: 2, backgroundColor: "#ffffff" });
+    const link = document.createElement("a");
+    link.download = name.endsWith(".png") ? name : `${name}.png`;
+    link.href = dataUrl;
+    link.click();
+  };
+
+  // SVG (serializa el primer <svg> dentro del contenedor)
+  const saveSvg = (ref: React.RefObject<HTMLElement>, name: string) => {
+    if (!ref.current) return;
+    const svg = ref.current.querySelector("svg");
+    if (!svg) return;
+
+    const clone = svg.cloneNode(true) as SVGSVGElement;
+    // Asegurar fondo blanco (opcional)
+    clone.setAttribute("style", "background:#ffffff;");
+
+    const xml = new XMLSerializer().serializeToString(clone);
+    const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.download = name.endsWith(".svg") ? name : `${name}.svg`;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
@@ -216,56 +226,31 @@ export default function DashboardPage() {
                 size="small"
                 onClick={() => loadDashboard()}
                 aria-label="Refrescar"
-                sx={{
-                  ml: 1,
-                  color: "primary.main",
-                  backgroundColor: "transparent",
-                  "&:hover": { backgroundColor: "transparent", color: "primary.dark" },
-                }}
+                sx={{ ml: 1, color: "primary.main", "&:hover": { color: "primary.dark" } }}
               >
                 <RefreshIcon />
               </IconButton>
             </MuiTooltip>
           </Stack>
-
         </Stack>
 
-        {/* Filtros (DatePicker bonitos) */}
+        {/* Filtros (DatePicker) */}
         <Paper sx={{ p: 2.5, borderRadius: 3 }}>
-          <Stack
-            direction={{ xs: "column", sm: "row" }}
-            spacing={2}
-            alignItems={{ xs: "stretch", sm: "center" }}
-          >
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "stretch", sm: "center" }}>
             <DatePicker
               label="Desde"
               value={desde}
               onChange={(v) => setDesde(v)}
-              slotProps={{
-                textField: {
-                  fullWidth: true,
-                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
-                },
-              }}
+              slotProps={{ textField: { fullWidth: true, sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } } } }}
             />
             <DatePicker
               label="Hasta"
               value={hasta}
               onChange={(v) => setHasta(v)}
-              slotProps={{
-                textField: {
-                  fullWidth: true,
-                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
-                },
-              }}
+              slotProps={{ textField: { fullWidth: true, sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } } } }}
             />
             <Stack direction="row" spacing={1}>
-              <Button
-                variant="contained"
-                onClick={loadDashboard}
-                disabled={loading}
-                sx={{ borderRadius: 2, px: 3 }}
-              >
+              <Button variant="contained" onClick={loadDashboard} disabled={loading} sx={{ borderRadius: 2, px: 3 }}>
                 {loading ? <CircularProgress size={20} /> : "Filtrar"}
               </Button>
               <Button
@@ -288,11 +273,7 @@ export default function DashboardPage() {
           <Stack direction={{ xs: "column", md: "row" }} gap={2}>
             {kpis.map((k, i) => (
               <Paper key={i} sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-                <Stack
-                  direction="row"
-                  alignItems="center"
-                  justifyContent="space-between"
-                >
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
                   <Typography color="text.secondary">{k.label}</Typography>
                   {k.icon}
                 </Stack>
@@ -306,53 +287,101 @@ export default function DashboardPage() {
 
         {/* Charts */}
         <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
-        <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-          <Typography fontWeight={800} color="primary">
-            Ventas por día
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Últimos resultados por fecha
-          </Typography>
+          {/* Ventas por día */}
+          <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <div>
+                <Typography fontWeight={800} color="primary">
+                  Ventas por día
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Últimos resultados por fecha
+                </Typography>
+              </div>
+              <Stack direction="row" spacing={1}>
+                <MuiTooltip title="Excel (datos de la gráfica)" arrow>
+                  <Button variant="outlined" size="small" startIcon={<DownloadIcon />} onClick={onExportVentasDiaXlsx} sx={niceBtn()}>
+                    Excel
+                  </Button>
+                </MuiTooltip>
+                <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
+                  <Button variant="outlined" size="small" startIcon={<ImageIcon />} onClick={() => savePng(ventasDiaRef, "ventas_por_dia")} sx={niceBtn()}>
+                    PNG
+                  </Button>
+                </MuiTooltip>
+                <MuiTooltip title="SVG (vector editable)" arrow>
+                  <Button variant="outlined" size="small" startIcon={<PolylineIcon />} onClick={() => saveSvg(ventasDiaRef, "ventas_por_dia")} sx={niceBtn()}>
+                    SVG
+                  </Button>
+                </MuiTooltip>
+              </Stack>
+            </Stack>
 
-          {/* margen arriba + altura */}
-          <Box sx={{ mt: 1.5, height: 260 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={ventasPorDia} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="dia" />
-                <YAxis />
-                <Tooltip />
-                <Line type="monotone" dataKey="ventas" stroke="#60a5fa" strokeWidth={2} dot />
-              </LineChart>
-            </ResponsiveContainer>
-          </Box>
-        </Paper>
+            {/* contenedor a capturar */}
+            <Box ref={ventasDiaRef} sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}>
+              <Box sx={{ height: 260 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={ventasPorDia} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="dia" />
+                    <YAxis />
+                    <Tooltip />
+                    <Line type="monotone" dataKey="ventas" stroke="#60a5fa" strokeWidth={2} dot />
+                  </LineChart>
+                </ResponsiveContainer>
+              </Box>
+            </Box>
+          </Paper>
 
-        <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-          <Typography fontWeight={800} color="primary">
-            Artículos más vendidos
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            Top por cantidad
-          </Typography>
+          {/* Top artículos */}
+          <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <div>
+                <Typography fontWeight={800} color="primary">
+                  Artículos más vendidos
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Top por cantidad
+                </Typography>
+              </div>
+              <Stack direction="row" spacing={1}>
+                <MuiTooltip title="Excel (datos de la gráfica)" arrow>
+                  <Button variant="outlined" size="small" startIcon={<DownloadIcon />} onClick={onExportTopArtXlsx} sx={niceBtn()}>
+                    Excel
+                  </Button>
+                </MuiTooltip>
+                <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
+                  <Button variant="outlined" size="small" startIcon={<ImageIcon />} onClick={() => savePng(topArtRef, "top_articulos")} sx={niceBtn()}>
+                    PNG
+                  </Button>
+                </MuiTooltip>
+                <MuiTooltip title="SVG (vector editable)" arrow>
+                  <Button variant="outlined" size="small" startIcon={<PolylineIcon />} onClick={() => saveSvg(topArtRef, "top_articulos")} sx={niceBtn()}>
+                    SVG
+                  </Button>
+                </MuiTooltip>
+              </Stack>
+            </Stack>
 
-          {/* margen arriba + altura */}
-          <Box sx={{ mt: 1.5, height: 260 }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topArticulos} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="qty" radius={[6, 6, 0, 0]}>
-                  {topArticulos.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </Box>
-        </Paper>
+            {/* contenedor a capturar */}
+            <Box ref={topArtRef} sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}>
+              <Box sx={{ height: 260 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={topArticulos} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="qty" radius={[6, 6, 0, 0]}>
+                      {topArticulos.map((entry, i) => (
+                        <Cell key={i} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </Box>
+            </Box>
+          </Paper>
         </Stack>
 
         {/* Tabla */}
@@ -378,22 +407,11 @@ export default function DashboardPage() {
                 pageSizeOptions={[5, 10, 20, 50]}
                 sx={{
                   borderRadius: 3,
-                  "& .MuiDataGrid-columnHeaders": {
-                    backgroundColor: "action.hover",
-                    fontWeight: 700,
-                  },
-                  "& .MuiDataGrid-row:nth-of-type(even)": {
-                    backgroundColor: "#ffffff",
-                  },
-                  "& .MuiDataGrid-row:nth-of-type(odd)": {
-                    backgroundColor: "rgba(14,165,233,0.06)",
-                  },
-                  "& .MuiDataGrid-row:hover": {
-                    backgroundColor: "rgba(14,165,233,0.12) !important",
-                  },
-                  "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
-                    outline: "none",
-                  },
+                  "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
+                  "& .MuiDataGrid-row:nth-of-type(even)": { backgroundColor: "#ffffff" },
+                  "& .MuiDataGrid-row:nth-of-type(odd)": { backgroundColor: "rgba(14,165,233,0.06)" },
+                  "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.12) !important" },
+                  "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
                 }}
               />
             </Box>
