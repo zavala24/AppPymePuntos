@@ -8,6 +8,7 @@ import {
   IconButton,
   Button,
   CircularProgress,
+  TextField,
 } from "@mui/material";
 import MuiTooltip from "@mui/material/Tooltip";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -73,7 +74,16 @@ function niceBtn() {
   };
 }
 
-const SOFT_COLORS = ["#60a5fa", "#34d399", "#f59e0b", "#f472b6", "#a78bfa", "#fb7185", "#22d3ee", "#86efac"];
+const SOFT_COLORS = [
+  "#60a5fa",
+  "#34d399",
+  "#f59e0b",
+  "#f472b6",
+  "#a78bfa",
+  "#fb7185",
+  "#22d3ee",
+  "#86efac",
+];
 
 /* ============ Componente principal ============ */
 export default function DashboardPage() {
@@ -83,20 +93,48 @@ export default function DashboardPage() {
   const [desde, setDesde] = React.useState<Dayjs | null>(null);
   const [hasta, setHasta] = React.useState<Dayjs | null>(null);
 
-  const [data, setData] = React.useState<DashboardVentasResponse | null>(null);
-  const [loading, setLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  // Buscador (grid)
+  const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
+  React.useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const [paginationModel, setPaginationModel] = React.useState<GridPaginationModel>({
-    page: 0,
-    pageSize: 5,
+  // Estados “completos” del dashboard
+  const [kpi, setKpi] = React.useState({
+    totalVentas: 0,
+    totalCobrado: 0,
+    puntosGenerados: 0,
+    ticketPromedio: 0,
   });
+  const [ventasPorDia, setVentasPorDia] = React.useState<
+    { dia: string; ventas: number }[]
+  >([]);
+  const [topArticulos, setTopArticulos] = React.useState<
+    { name: string; qty: number; color: string }[]
+  >([]);
+
+  // Grid
+  const [rows, setRows] = React.useState<VentaRowDto[]>([]);
+  const [totalRows, setTotalRows] = React.useState(0);
+  const [paginationModel, setPaginationModel] =
+    React.useState<GridPaginationModel>({
+      page: 0,
+      pageSize: 5,
+    });
+
+  // Loading
+  const [loading, setLoading] = React.useState(false); // KPIs + charts
+  const [rowsLoading, setRowsLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   // Refs para capturar las gráficas
   const ventasDiaRef = React.useRef<HTMLDivElement>(null);
   const topArtRef = React.useRef<HTMLDivElement>(null);
 
-  // Cargar datos desde el backend
+  /* ================== LOADERS ================== */
+  // Carga COMPLETA: solo KPIs + gráficas (+ opcionalmente primera página del grid)
   const loadDashboard = React.useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -107,12 +145,34 @@ export default function DashboardPage() {
         hasta: hasta ? hasta.toDate() : undefined,
         page: 1,
         pageSize: 100,
+        // ¡No mandes search aquí! para no recargar todo al teclear
       };
 
-      const res: ServiceResponse<DashboardVentasResponse> = await sellService.getVentasDashboard(req);
+      const res: ServiceResponse<DashboardVentasResponse> =
+        await sellService.getVentasDashboard(req);
 
       if (res.status === 200 && res.data) {
-        setData(res.data);
+        const d = res.data;
+
+        setKpi({
+          totalVentas: d.totalVentas,
+          totalCobrado: d.totalCobrado,
+          puntosGenerados: d.puntosGenerados,
+          ticketPromedio: d.ticketPromedio,
+        });
+
+        setVentasPorDia(d.ventasPorDia.map((x) => ({ dia: x.dia, ventas: x.ventas })));
+        setTopArticulos(
+          d.topArticulos.map((x, i) => ({
+            name: x.nombre,
+            qty: x.cantidad,
+            color: SOFT_COLORS[i % SOFT_COLORS.length],
+          }))
+        );
+
+        // Precarga (opcional) de filas base
+        setRows(d.rows);
+        setTotalRows(d.totalRows);
       } else {
         setError(res.message || "Error al obtener las ventas");
       }
@@ -123,36 +183,118 @@ export default function DashboardPage() {
     }
   }, [usuarioNombre, desde, hasta]);
 
+  // Carga SOLO FILAS del grid (paginación y búsqueda)
+  const loadRows = React.useCallback(async () => {
+    setRowsLoading(true);
+    try {
+      const req: DashboardVentasRequest = {
+        usuarioNombre,
+        desde: desde ? desde.toDate() : undefined,
+        hasta: hasta ? hasta.toDate() : undefined,
+        page: paginationModel.page + 1,
+        pageSize: paginationModel.pageSize,
+        search: debouncedSearch || undefined,
+      };
+
+      const res: ServiceResponse<DashboardVentasResponse> =
+        await sellService.getVentasDashboard(req);
+
+      if (res.status === 200 && res.data) {
+        setRows(res.data.rows);
+        setTotalRows(res.data.totalRows);
+      } else {
+        setRows([]);
+        setTotalRows(0);
+      }
+    } finally {
+      setRowsLoading(false);
+    }
+  }, [
+    usuarioNombre,
+    desde,
+    hasta,
+    paginationModel.page,
+    paginationModel.pageSize,
+    debouncedSearch,
+  ]);
+
+  // Efectos
   React.useEffect(() => {
-    loadDashboard();
+    loadDashboard(); // on mount + cuando cambian fechas
   }, [loadDashboard]);
 
-  /* ================== RENDER ================== */
-  const kpis = React.useMemo(() => {
-    if (!data) return [];
-    return [
-      { label: "Ventas", value: String(data.totalVentas), icon: <ShoppingCartIcon sx={{ color: "#60a5fa" }} /> },
-      { label: "Cobrado", value: fmtCurrency(data.totalCobrado), icon: <AttachMoneyIcon sx={{ color: "#34d399" }} /> },
-      { label: "Puntos generados", value: data.puntosGenerados.toFixed(2), icon: <PercentIcon sx={{ color: "#a78bfa" }} /> },
-      { label: "Ticket promedio", value: fmtCurrency(data.ticketPromedio), icon: <TrendingUpIcon sx={{ color: "#f59e0b" }} /> },
-    ];
-  }, [data]);
+  // reset a página 0 cuando cambia el término
+  React.useEffect(() => {
+    setPaginationModel((p) => ({ ...p, page: 0 }));
+  }, [debouncedSearch]);
 
+  // cargar filas cuando cambien search/paginación/fechas
+  React.useEffect(() => {
+    loadRows();
+  }, [loadRows]);
+
+  /* ================== KPIs render helper ================== */
+  const kpiCards = [
+    {
+      label: "Ventas",
+      value: String(kpi.totalVentas),
+      icon: <ShoppingCartIcon sx={{ color: "#60a5fa" }} />,
+    },
+    {
+      label: "Cobrado",
+      value: fmtCurrency(kpi.totalCobrado),
+      icon: <AttachMoneyIcon sx={{ color: "#34d399" }} />,
+    },
+    {
+      label: "Puntos generados",
+      value: kpi.puntosGenerados.toFixed(2),
+      icon: <PercentIcon sx={{ color: "#a78bfa" }} />,
+    },
+    {
+      label: "Ticket promedio",
+      value: fmtCurrency(kpi.ticketPromedio),
+      icon: <TrendingUpIcon sx={{ color: "#f59e0b" }} />,
+    },
+  ];
+
+  /* ================== GRID ================== */
   const columns: GridColDef<VentaRowDto>[] = [
     { field: "folio", headerName: "Folio", width: 110 },
     { field: "articulo", headerName: "Artículo", width: 140 },
     { field: "descripcion", headerName: "Descripción", flex: 1, minWidth: 160 },
-    { field: "monto", headerName: "Monto", width: 140, align: "center", headerAlign: "center", valueFormatter: (p) => fmtCurrency(p as number) },
-    { field: "puntosGenerados", headerName: "Puntos", width: 120, align: "center", headerAlign: "center", valueFormatter: (p) => Number(p as number).toFixed(2) },
-    { field: "cobrado", headerName: "Cobrado", width: 140, align: "center", headerAlign: "center", valueFormatter: (p) => fmtCurrency(p as number) },
-    { field: "creadoFecha", headerName: "Fecha", width: 160, valueFormatter: (p) => fmtDate(p as string) },
+    {
+      field: "monto",
+      headerName: "Monto",
+      width: 140,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => fmtCurrency(p as number),
+    },
+    {
+      field: "puntosGenerados",
+      headerName: "Puntos",
+      width: 120,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => Number(p as number).toFixed(2),
+    },
+    {
+      field: "cobrado",
+      headerName: "Cobrado",
+      width: 140,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => fmtCurrency(p as number),
+    },
+    {
+      field: "creadoFecha",
+      headerName: "Fecha",
+      width: 160,
+      valueFormatter: (p) => fmtDate(p as string),
+    },
   ];
 
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
-
-  /* ================== Charts ================== */
-  const ventasPorDia = data?.ventasPorDia?.map((x) => ({ dia: x.dia, ventas: x.ventas })) ?? [];
-  const topArticulos = data?.topArticulos?.map((x, i) => ({ name: x.nombre, qty: x.cantidad, color: SOFT_COLORS[i % SOFT_COLORS.length] })) ?? [];
 
   /* ================== EXPORT HELPERS ================== */
   // Excel (genérico)
@@ -168,19 +310,28 @@ export default function DashboardPage() {
   // Excel: Ventas por día
   const onExportVentasDiaXlsx = () => {
     const rows = ventasPorDia.map((r) => ({ Dia: r.dia, Ventas: r.ventas }));
-    exportSheet([{ name: "Ventas_por_dia", rows }], `ventas_por_dia_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    exportSheet(
+      [{ name: "Ventas_por_dia", rows }],
+      `ventas_por_dia_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
   };
 
   // Excel: Top artículos
   const onExportTopArtXlsx = () => {
     const rows = topArticulos.map((r) => ({ Articulo: r.name, Cantidad: r.qty }));
-    exportSheet([{ name: "Top_articulos", rows }], `top_articulos_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    exportSheet(
+      [{ name: "Top_articulos", rows }],
+      `top_articulos_${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
   };
 
   // PNG (genérico, usa html-to-image)
   const savePng = async (ref: React.RefObject<HTMLElement>, name: string) => {
     if (!ref.current) return;
-    const dataUrl = await htmlToImage.toPng(ref.current, { pixelRatio: 2, backgroundColor: "#ffffff" });
+    const dataUrl = await htmlToImage.toPng(ref.current, {
+      pixelRatio: 2,
+      backgroundColor: "#ffffff",
+    });
     const link = document.createElement("a");
     link.download = name.endsWith(".png") ? name : `${name}.png`;
     link.href = dataUrl;
@@ -194,7 +345,6 @@ export default function DashboardPage() {
     if (!svg) return;
 
     const clone = svg.cloneNode(true) as SVGSVGElement;
-    // Asegurar fondo blanco (opcional)
     clone.setAttribute("style", "background:#ffffff;");
 
     const xml = new XMLSerializer().serializeToString(clone);
@@ -236,21 +386,40 @@ export default function DashboardPage() {
 
         {/* Filtros (DatePicker) */}
         <Paper sx={{ p: 2.5, borderRadius: 3 }}>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "stretch", sm: "center" }}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={2}
+            alignItems={{ xs: "stretch", sm: "center" }}
+          >
             <DatePicker
               label="Desde"
               value={desde}
               onChange={(v) => setDesde(v)}
-              slotProps={{ textField: { fullWidth: true, sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } } } }}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
+                },
+              }}
             />
             <DatePicker
               label="Hasta"
               value={hasta}
               onChange={(v) => setHasta(v)}
-              slotProps={{ textField: { fullWidth: true, sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } } } }}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
+                },
+              }}
             />
             <Stack direction="row" spacing={1}>
-              <Button variant="contained" onClick={loadDashboard} disabled={loading} sx={{ borderRadius: 2, px: 3 }}>
+              <Button
+                variant="contained"
+                onClick={loadDashboard}
+                disabled={loading}
+                sx={{ borderRadius: 2, px: 3 }}
+              >
                 {loading ? <CircularProgress size={20} /> : "Filtrar"}
               </Button>
               <Button
@@ -269,21 +438,19 @@ export default function DashboardPage() {
         </Paper>
 
         {/* KPIs */}
-        {data && (
-          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
-            {kpis.map((k, i) => (
-              <Paper key={i} sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <Typography color="text.secondary">{k.label}</Typography>
-                  {k.icon}
-                </Stack>
-                <Typography variant="h5" fontWeight={800} sx={{ mt: 1 }}>
-                  {k.value}
-                </Typography>
-              </Paper>
-            ))}
-          </Stack>
-        )}
+        <Stack direction={{ xs: "column", md: "row" }} gap={2}>
+          {kpiCards.map((k, i) => (
+            <Paper key={i} sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Typography color="text.secondary">{k.label}</Typography>
+                {k.icon}
+              </Stack>
+              <Typography variant="h5" fontWeight={800} sx={{ mt: 1 }}>
+                {k.value}
+              </Typography>
+            </Paper>
+          ))}
+        </Stack>
 
         {/* Charts */}
         <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
@@ -300,17 +467,35 @@ export default function DashboardPage() {
               </div>
               <Stack direction="row" spacing={1}>
                 <MuiTooltip title="Excel (datos de la gráfica)" arrow>
-                  <Button variant="outlined" size="small" startIcon={<DownloadIcon />} onClick={onExportVentasDiaXlsx} sx={niceBtn()}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<DownloadIcon />}
+                    onClick={onExportVentasDiaXlsx}
+                    sx={niceBtn()}
+                  >
                     Excel
                   </Button>
                 </MuiTooltip>
                 <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
-                  <Button variant="outlined" size="small" startIcon={<ImageIcon />} onClick={() => savePng(ventasDiaRef, "ventas_por_dia")} sx={niceBtn()}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<ImageIcon />}
+                    onClick={() => savePng(ventasDiaRef, "ventas_por_dia")}
+                    sx={niceBtn()}
+                  >
                     PNG
                   </Button>
                 </MuiTooltip>
                 <MuiTooltip title="SVG (vector editable)" arrow>
-                  <Button variant="outlined" size="small" startIcon={<PolylineIcon />} onClick={() => saveSvg(ventasDiaRef, "ventas_por_dia")} sx={niceBtn()}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<PolylineIcon />}
+                    onClick={() => saveSvg(ventasDiaRef, "ventas_por_dia")}
+                    sx={niceBtn()}
+                  >
                     SVG
                   </Button>
                 </MuiTooltip>
@@ -346,17 +531,35 @@ export default function DashboardPage() {
               </div>
               <Stack direction="row" spacing={1}>
                 <MuiTooltip title="Excel (datos de la gráfica)" arrow>
-                  <Button variant="outlined" size="small" startIcon={<DownloadIcon />} onClick={onExportTopArtXlsx} sx={niceBtn()}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<DownloadIcon />}
+                    onClick={onExportTopArtXlsx}
+                    sx={niceBtn()}
+                  >
                     Excel
                   </Button>
                 </MuiTooltip>
                 <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
-                  <Button variant="outlined" size="small" startIcon={<ImageIcon />} onClick={() => savePng(topArtRef, "top_articulos")} sx={niceBtn()}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<ImageIcon />}
+                    onClick={() => savePng(topArtRef, "top_articulos")}
+                    sx={niceBtn()}
+                  >
                     PNG
                   </Button>
                 </MuiTooltip>
                 <MuiTooltip title="SVG (vector editable)" arrow>
-                  <Button variant="outlined" size="small" startIcon={<PolylineIcon />} onClick={() => saveSvg(topArtRef, "top_articulos")} sx={niceBtn()}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<PolylineIcon />}
+                    onClick={() => saveSvg(topArtRef, "top_articulos")}
+                    sx={niceBtn()}
+                  >
                     SVG
                   </Button>
                 </MuiTooltip>
@@ -390,7 +593,34 @@ export default function DashboardPage() {
             Ventas recientes
           </Typography>
           <Divider sx={{ mb: 2 }} />
+
+          {/* Search + refresh (como “Mis usuarios”) */}
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
+            <TextField
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por folio, artículo, descripción…"
+              size="small"
+              fullWidth
+              sx={{
+                maxWidth: { xs: "100%", md: 720 },
+                "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
+                "& .MuiOutlinedInput-input": { lineHeight: "44px" },
+              }}
+            />
+            <MuiTooltip title="Refrescar" arrow>
+              <IconButton
+                size="small"
+                onClick={() => loadRows()}
+                sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}
+              >
+                <RefreshIcon />
+              </IconButton>
+            </MuiTooltip>
+          </Stack>
+
           {error && <Typography color="error" mb={2}>{error}</Typography>}
+
           {loading ? (
             <Box display="flex" justifyContent="center" py={6}>
               <CircularProgress />
@@ -398,20 +628,34 @@ export default function DashboardPage() {
           ) : (
             <Box sx={{ height: dynamicHeight, width: "100%" }}>
               <DataGrid
-                rows={data?.rows ?? []}
+                rows={rows}
                 columns={columns}
                 getRowId={(r) => r.folio}
+                loading={rowsLoading}
+                disableRowSelectionOnClick
+                rowCount={totalRows}
+                paginationMode="server"
                 paginationModel={paginationModel}
                 onPaginationModelChange={setPaginationModel}
-                disableRowSelectionOnClick
                 pageSizeOptions={[5, 10, 20, 50]}
                 sx={{
                   borderRadius: 3,
-                  "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
-                  "& .MuiDataGrid-row:nth-of-type(even)": { backgroundColor: "#ffffff" },
-                  "& .MuiDataGrid-row:nth-of-type(odd)": { backgroundColor: "rgba(14,165,233,0.06)" },
-                  "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.12) !important" },
-                  "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
+                  "& .MuiDataGrid-columnHeaders": {
+                    backgroundColor: "action.hover",
+                    fontWeight: 700,
+                  },
+                  "& .MuiDataGrid-row:nth-of-type(even)": {
+                    backgroundColor: "#ffffff",
+                  },
+                  "& .MuiDataGrid-row:nth-of-type(odd)": {
+                    backgroundColor: "rgba(14,165,233,0.06)",
+                  },
+                  "& .MuiDataGrid-row:hover": {
+                    backgroundColor: "rgba(14,165,233,0.12) !important",
+                  },
+                  "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
+                    outline: "none",
+                  },
                 }}
               />
             </Box>

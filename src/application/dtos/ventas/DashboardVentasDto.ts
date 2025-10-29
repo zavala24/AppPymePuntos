@@ -6,6 +6,7 @@ export interface DashboardVentasRequest {
   hasta?: Date | string | null;
   page?: number;
   pageSize?: number;
+  search?: string;
 }
 
 export interface VentaRowDto {
