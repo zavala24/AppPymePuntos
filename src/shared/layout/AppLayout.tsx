@@ -25,6 +25,7 @@ import ExpandLess from "@mui/icons-material/ExpandLess";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import MenuIcon from "@mui/icons-material/Menu";
 import LogoutRounded from "@mui/icons-material/Logout";
+import LoyaltyIcon from "@mui/icons-material/Loyalty";
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/shared/auth/AuthContext";
@@ -81,10 +82,8 @@ export default function AppLayout() {
   const isSuperAdmin = role === "superadmin";
   const isAdmin = role === "admin";
 
-  // Submenú de configuración (solo aparece para SuperAdmin)
-  const [openConfig, setOpenConfig] = useState(
-    pathname.startsWith("/configuracion")
-  );
+  // Submenú de configuración (abierto si estás en /configuracion/*)
+  const [openConfig, setOpenConfig] = useState(pathname.startsWith("/configuracion"));
   useEffect(() => {
     setOpenConfig(pathname.startsWith("/configuracion"));
   }, [pathname]);
@@ -94,14 +93,7 @@ export default function AppLayout() {
     navigate("/login", { replace: true });
   };
 
-  // ====== ORDEN PERSONALIZADO ======
-  // 1) Negocios (SuperAdmin)
-  // 2) Mi negocio (Admin)
-  // 3) Mis usuarios (Admin)
-  // 4) Notificaciones (Admin)
-  // 5) Configuración (SuperAdmin)
-  // 6) Dashboard (último)
-
+  // ====== MENÚ PRINCIPAL ======
   const menuItems = [
     ...(isSuperAdmin
       ? [
@@ -112,46 +104,39 @@ export default function AppLayout() {
           },
         ]
       : []),
+
     ...(isAdmin
       ? [
-          {
-            to: "/mi-negocio",
-            label: "Mi negocio",
-            icon: <StoreIcon />,
-          },
-          {
-            to: "/mis-usuarios",
-            label: "Mis usuarios",
-            icon: <PeopleIcon />,
-          },
-          {
-            to: "/notificaciones",
-            label: "Notificaciones",
-            icon: <NotificationsIcon />,
-          },
+          { to: "/mi-negocio", label: "Mi negocio", icon: <StoreIcon /> },
+          { to: "/mis-usuarios", label: "Mis usuarios", icon: <PeopleIcon /> },
+          { to: "/notificaciones", label: "Notificaciones", icon: <NotificationsIcon /> },
         ]
       : []),
-    // Configuración (solo SuperAdmin)
+
+    // CONFIGURACIÓN visible para SuperAdmin y Admin
     {
       kind: "config" as const,
-      visible: isSuperAdmin,
+      visible: isSuperAdmin || isAdmin,
+      // selected si estás en cualquier ruta de /configuracion/*
       selected: pathname.startsWith("/configuracion"),
+      // Hijos según rol
       children: isSuperAdmin
         ? [
+            { to: "/configuracion/negocio", label: "Negocio", icon: <StoreIcon /> },
+            { to: "/configuracion/usuarios", label: "Usuarios", icon: <PeopleIcon /> },
+          ]
+        : isAdmin
+        ? [
             {
-              to: "/configuracion/negocio",
-              label: "Negocio",
-              icon: <StoreIcon />,
-            },
-            {
-              to: "/configuracion/usuarios",
-              label: "Usuarios",
-              icon: <PeopleIcon />,
+              to: "/configuracion/personalizar-promocion",
+              label: "Promociones",
+              icon: <LoyaltyIcon />,
             },
           ]
         : [],
     },
-    // Dashboard (al final)
+
+    // Dashboard
     {
       to: "/dashboard",
       label: "Dashboard",
@@ -240,6 +225,7 @@ export default function AppLayout() {
                             key={c.to}
                             component={NavLink}
                             to={c.to}
+                            // selected si la ruta actual empieza con el hijo
                             selected={pathname.startsWith(c.to)}
                             sx={{ borderRadius: 2, mb: 0.5 }}
                           >

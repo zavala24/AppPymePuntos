@@ -11,4 +11,5 @@ export type UpdateNegocioWithConfigDto = {
 
   porcentajeVentas?: number | null;
   urlLogo?: string | null;
+  permitirConfiguracionPersonalizada?: boolean | null;
 };

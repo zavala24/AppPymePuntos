@@ -7,6 +7,7 @@ export interface DashboardVentasRequest {
   page?: number;
   pageSize?: number;
   search?: string;
+  idNegocio?: number;
 }
 
 export interface VentaRowDto {

@@ -37,6 +37,9 @@ export class SellRepository implements ISellRepository {
       params.search = req.search.trim();
     }
 
+    if (typeof req.idNegocio === "number" && req.idNegocio > 0) {
+      params.idNegocio = req.idNegocio;
+    }
     const { data } = await api.get<ServiceResponse<DashboardVentasResponse>>(
       `${this.base}/GetVentasDashboard`,
       { params }

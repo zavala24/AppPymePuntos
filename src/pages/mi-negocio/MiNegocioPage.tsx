@@ -9,6 +9,8 @@ import {
   Stack,
   Snackbar,
   Alert,
+  FormControlLabel,
+  Switch,
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
 import ShieldIcon from "@mui/icons-material/Security";
@@ -32,14 +34,13 @@ function getIdNegocioActual(): number | null {
     if (payload?.idNegocio && !Number.isNaN(Number(payload.idNegocio))) {
       return Number(payload.idNegocio);
     }
-  } catch {
-    /* noop */
-  }
+  } catch { /* noop */ }
   return null;
 }
 
 // -------- Tipos --------
 type FormState = {
+  // info pública
   nombre: string;
   facebook: string;
   instagram: string;
@@ -47,6 +48,9 @@ type FormState = {
   categoria: string;
   direccion: string;
   esActivo: boolean;
+
+  // config
+  permitirConfiguracionPersonalizada: boolean;
   porcentajeVentas: string;
   urlLogo: string;
 };
@@ -64,6 +68,7 @@ export default function MiNegocioPage() {
     categoria: "",
     direccion: "",
     esActivo: true,
+    permitirConfiguracionPersonalizada: false,
     porcentajeVentas: "",
     urlLogo: "",
   });
@@ -100,6 +105,8 @@ export default function MiNegocioPage() {
           categoria: d.categoria ?? "",
           direccion: d.direccion ?? "",
           esActivo: !!d.esActivo,
+
+          permitirConfiguracionPersonalizada: !!(d as any).permitirConfiguracionPersonalizada,
           porcentajeVentas: d.porcentajeVentas != null ? String(d.porcentajeVentas) : "",
           urlLogo: d.urlLogo ?? "",
         });
@@ -118,7 +125,7 @@ export default function MiNegocioPage() {
   }, [loadData]);
 
   // -------- Validación porcentaje --------
-  const percentRegex = /^\d*(?:[.,]\d*)?$/; // "", "10", "10.5", etc
+  const percentRegex = /^\d*(?:[.,]\d*)?$/;
   const onPercentChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const v = e.target.value;
     if (v.length <= 6 && percentRegex.test(v)) {
@@ -133,12 +140,11 @@ export default function MiNegocioPage() {
     return Number.isFinite(n) ? n : NaN;
   }, [form.porcentajeVentas]);
 
-  // ✅ Habilitar guardar siempre que el porcentaje sea válido (o vacío)
   const percentIsValid =
     form.porcentajeVentas.trim() === "" ||
     (Number.isFinite(parsedPercent) && parsedPercent >= 0 && parsedPercent <= 100);
 
-  const canSave = percentIsValid; // ya NO depende de "nombre"
+  const canSave = percentIsValid;
 
   // -------- Guardar --------
   const onGuardar = async () => {
@@ -156,16 +162,19 @@ export default function MiNegocioPage() {
       const resp = await negocioService.updateWithConfig({
         idNegocio,
         usuarioNombre: localStorage.getItem("pa_user") || "admin",
-        nombre: form.nombre || null,      // nombre opcional
+        // info pública
+        nombre: form.nombre || null,
         facebook: form.facebook || null,
         instagram: form.instagram || null,
         sitioWeb: form.sitioWeb || null,
         categoria: form.categoria || null,
         direccion: form.direccion || null,
         esActivo: form.esActivo,
+        // config
+        permitirConfiguracionPersonalizada: form.permitirConfiguracionPersonalizada,
         porcentajeVentas: form.porcentajeVentas.trim() === "" ? null : parsedPercent,
         urlLogo: form.urlLogo?.trim() || null,
-      });
+      } as any);
 
       if (resp.status === 200) {
         showToast(resp.message || "Datos guardados.", "success");
@@ -196,9 +205,9 @@ export default function MiNegocioPage() {
         <Chip icon={<ShieldIcon />} label="Solo ADMIN" color="secondary" variant="outlined" />
       </Stack>
 
-      {/* Información */}
+      {/* Información del negocio */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, mb: 3 }}>
-        <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
+        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 2 }}>
           Información del negocio
         </Typography>
 
@@ -252,28 +261,59 @@ export default function MiNegocioPage() {
           label="Dirección"
           value={form.direccion}
           onChange={(e) => setForm((f) => ({ ...f, direccion: e.target.value }))}
-          sx={{ mb: 2 }}
+          sx={{ mb: 1 }}
           disabled={loading || saving}
         />
       </Paper>
 
-      {/* Configuración */}
+      {/* Configuración de negocio */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
-        <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
+        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 1.5 }}>
           Configuración de negocio
         </Typography>
 
+        {/* Grid con filas explícitas: el logo ocupa las 3 filas de la derecha */}
         <Box
           sx={{
             display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "1fr 1.5fr 260px" },
-            columnGap: 2,
-            rowGap: 2,
-            alignItems: "stretch",
-            mb: 2,
+            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+            gridTemplateRows: { xs: "auto", md: "auto auto auto" },
+            gap: 2,
+            alignItems: "start",
           }}
         >
+          {/* Fila 1, Columna 1: Switch */}
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 1.5,
+              borderRadius: 2,
+              display: "flex",
+              alignItems: "center",
+              gridColumn: { xs: "1 / -1", md: "1 / 2" },
+              gridRow: { xs: "auto", md: "1 / 2" },
+            }}
+          >
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={form.permitirConfiguracionPersonalizada}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      permitirConfiguracionPersonalizada: e.target.checked,
+                    }))
+                  }
+                  disabled={loading || saving}
+                />
+              }
+              label="Permitir configuraciones personalizadas (Promociones)"
+            />
+          </Paper>
+
+          {/* Fila 2, Columna 1: Porcentaje */}
           <TextField
+            fullWidth
             label="Porcentaje de ventas (%)"
             placeholder="Ej. 0.01"
             inputMode="decimal"
@@ -287,46 +327,82 @@ export default function MiNegocioPage() {
             }
             inputProps={{ maxLength: 6 }}
             disabled={loading || saving}
-          />
-
-          <TextField
-            label="URL del logo"
-            value={form.urlLogo}
-            multiline
-            minRows={3}
-            InputProps={{ readOnly: true }}
-            disabled
-          />
-
-          <Box
             sx={{
-              width: { xs: 220, md: 260 },
-              height: { xs: 220, md: 260 },
+              gridColumn: { xs: "1 / -1", md: "1 / 2" },
+              gridRow: { xs: "auto", md: "2 / 3" },
+            }}
+          />
+
+          {/* Fila 3, Columna 1: URL del logo */}
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 1.5,
               borderRadius: 2,
-              bgcolor: "#f3f4f6",
-              border: "1px dashed rgba(0,0,0,0.12)",
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              overflow: "hidden",
+              flexDirection: "column",
+              gap: 1,
+              gridColumn: { xs: "1 / -1", md: "1 / 2" },
+              gridRow: { xs: "auto", md: "3 / 4" },
             }}
           >
-            {previewUrl ? (
-              <Box
-                component="img"
-                src={previewUrl}
-                alt="Logo"
-                sx={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
-              />
-            ) : (
-              <Typography variant="caption" color="text.secondary">
-                Vista previa
-              </Typography>
-            )}
-          </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>
+              URL del logo
+            </Typography>
+            <TextField
+              value={form.urlLogo}
+              placeholder="https://..."
+              size="small"
+              fullWidth
+              InputProps={{ readOnly: true }}
+              disabled
+            />
+            <Typography variant="caption" color="text.disabled" sx={{ px: 0.5 }}>
+              La imagen se usa para mostrar tu marca en la app.
+            </Typography>
+          </Paper>
+
+          {/* Logo: Columna 2, ocupa filas 1 a 3 */}
+<Paper
+  elevation={0}
+  sx={{
+    p: 1.5,
+    borderRadius: 2,
+    border: (t) => `1px solid ${t.palette.divider}`,
+    bgcolor: "#f8fafc",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gridColumn: { xs: "1 / -1", md: "2 / 3" },
+    gridRow: { xs: "auto", md: "1 / 4" },
+    minHeight: { xs: 200, md: 280 },
+    maxHeight: 300,
+  }}
+>
+  {previewUrl ? (
+    <Box
+      component="img"
+      src={previewUrl}
+      alt="Logo"
+      sx={{
+        width: "100%",
+        maxWidth: 250,   // 🔹 antes 520
+        aspectRatio: "1 / 1",
+        objectFit: "contain",
+        display: "block",
+        borderRadius: 2,
+      }}
+    />
+  ) : (
+    <Typography variant="caption" color="text.secondary">
+      Vista previa del logotipo
+    </Typography>
+  )}
+</Paper>
         </Box>
 
-        <Stack direction="row" justifyContent="flex-end" gap={1}>
+        {/* Botón guardar */}
+        <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
           <Button
             startIcon={<SaveIcon />}
             variant="contained"
@@ -336,13 +412,13 @@ export default function MiNegocioPage() {
           >
             {saving ? "Guardando..." : "Guardar"}
           </Button>
-        </Stack>
+        </Box>
       </Paper>
 
       {/* TOAST */}
       <Snackbar
         open={toastOpen}
-        autoHideDuration={2000} // 2s
+        autoHideDuration={2200}
         onClose={() => setToastOpen(false)}
         anchorOrigin={{ vertical: "top", horizontal: "right" }}
       >

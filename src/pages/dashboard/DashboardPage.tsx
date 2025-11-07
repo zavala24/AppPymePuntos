@@ -1,3 +1,4 @@
+// src/pages/dashboard/DashboardPage.tsx
 import * as React from "react";
 import {
   Box,
@@ -11,6 +12,8 @@ import {
   TextField,
 } from "@mui/material";
 import MuiTooltip from "@mui/material/Tooltip";
+import Autocomplete from "@mui/material/Autocomplete";
+
 import RefreshIcon from "@mui/icons-material/Refresh";
 import ShoppingCartIcon from "@mui/icons-material/ShoppingCart";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
@@ -19,6 +22,8 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import DownloadIcon from "@mui/icons-material/Download";
 import ImageIcon from "@mui/icons-material/Image";
 import PolylineIcon from "@mui/icons-material/Polyline";
+import SearchIcon from "@mui/icons-material/Search";
+
 import {
   BarChart,
   Bar,
@@ -53,6 +58,7 @@ import {
   DashboardVentasResponse,
   VentaRowDto,
 } from "@/application/dtos/ventas/DashboardVentasDto";
+import { api } from "@/infrastructure/http/api";
 
 const sellService = new SellService(new SellRepository());
 
@@ -71,7 +77,7 @@ function niceBtn() {
     px: 1.5,
     minWidth: 0,
     height: 32,
-  };
+  } as const;
 }
 
 const SOFT_COLORS = [
@@ -85,179 +91,143 @@ const SOFT_COLORS = [
   "#86efac",
 ];
 
+/* ============ Tipos auxiliares ============ */
+type NegocioOption = { id: number; nombre: string };
+
 /* ============ Componente principal ============ */
 export default function DashboardPage() {
   const usuarioNombre = localStorage.getItem("pa_user") || "";
+  const role = (localStorage.getItem("pa_role") || "").toLowerCase();
+  const isSuperAdmin = role === "superadmin";
 
   // Filtros con DatePicker (Dayjs)
   const [desde, setDesde] = React.useState<Dayjs | null>(null);
   const [hasta, setHasta] = React.useState<Dayjs | null>(null);
 
-  // Buscador (grid)
-  const [search, setSearch] = React.useState("");
-  const [debouncedSearch, setDebouncedSearch] = React.useState("");
-  React.useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(search.trim()), 300);
-    return () => clearTimeout(t);
-  }, [search]);
+  // SUPERADMIN: dropdown de negocios
+  const [negocios, setNegocios] = React.useState<NegocioOption[]>([]);
+  const [loadingNegocios, setLoadingNegocios] = React.useState(false);
+  const [negocioId, setNegocioId] = React.useState<number | "">("");
 
-  // Estados “completos” del dashboard
-  const [kpi, setKpi] = React.useState({
-    totalVentas: 0,
-    totalCobrado: 0,
-    puntosGenerados: 0,
-    ticketPromedio: 0,
-  });
-  const [ventasPorDia, setVentasPorDia] = React.useState<
-    { dia: string; ventas: number }[]
-  >([]);
-  const [topArticulos, setTopArticulos] = React.useState<
-    { name: string; qty: number; color: string }[]
-  >([]);
+  // Datos
+  const [data, setData] = React.useState<DashboardVentasResponse | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
-  // Grid
-  const [rows, setRows] = React.useState<VentaRowDto[]>([]);
-  const [totalRows, setTotalRows] = React.useState(0);
+  // Grid: paginación y búsqueda
   const [paginationModel, setPaginationModel] =
     React.useState<GridPaginationModel>({
       page: 0,
       pageSize: 5,
     });
+  const [search, setSearch] = React.useState("");
+  const [debouncedSearch, setDebouncedSearch] = React.useState("");
 
-  // Loading
-  const [loading, setLoading] = React.useState(false); // KPIs + charts
-  const [rowsLoading, setRowsLoading] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
+  // Debounce del search para no spamear la API
+  React.useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 350);
+    return () => clearTimeout(t);
+  }, [search]);
 
   // Refs para capturar las gráficas
   const ventasDiaRef = React.useRef<HTMLDivElement>(null);
   const topArtRef = React.useRef<HTMLDivElement>(null);
 
-  /* ================== LOADERS ================== */
-  // Carga COMPLETA: solo KPIs + gráficas (+ opcionalmente primera página del grid)
-  const loadDashboard = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const req: DashboardVentasRequest = {
-        usuarioNombre,
-        desde: desde ? desde.toDate() : undefined,
-        hasta: hasta ? hasta.toDate() : undefined,
-        page: 1,
-        pageSize: 100,
-        // ¡No mandes search aquí! para no recargar todo al teclear
-      };
-
-      const res: ServiceResponse<DashboardVentasResponse> =
-        await sellService.getVentasDashboard(req);
-
-      if (res.status === 200 && res.data) {
-        const d = res.data;
-
-        setKpi({
-          totalVentas: d.totalVentas,
-          totalCobrado: d.totalCobrado,
-          puntosGenerados: d.puntosGenerados,
-          ticketPromedio: d.ticketPromedio,
-        });
-
-        setVentasPorDia(d.ventasPorDia.map((x) => ({ dia: x.dia, ventas: x.ventas })));
-        setTopArticulos(
-          d.topArticulos.map((x, i) => ({
-            name: x.nombre,
-            qty: x.cantidad,
-            color: SOFT_COLORS[i % SOFT_COLORS.length],
-          }))
-        );
-
-        // Precarga (opcional) de filas base
-        setRows(d.rows);
-        setTotalRows(d.totalRows);
-      } else {
-        setError(res.message || "Error al obtener las ventas");
-      }
-    } catch (err: any) {
-      setError(err.message ?? "Error inesperado al cargar el dashboard");
-    } finally {
-      setLoading(false);
-    }
-  }, [usuarioNombre, desde, hasta]);
-
-  // Carga SOLO FILAS del grid (paginación y búsqueda)
-  const loadRows = React.useCallback(async () => {
-    setRowsLoading(true);
-    try {
-      const req: DashboardVentasRequest = {
-        usuarioNombre,
-        desde: desde ? desde.toDate() : undefined,
-        hasta: hasta ? hasta.toDate() : undefined,
-        page: paginationModel.page + 1,
-        pageSize: paginationModel.pageSize,
-        search: debouncedSearch || undefined,
-      };
-
-      const res: ServiceResponse<DashboardVentasResponse> =
-        await sellService.getVentasDashboard(req);
-
-      if (res.status === 200 && res.data) {
-        setRows(res.data.rows);
-        setTotalRows(res.data.totalRows);
-      } else {
-        setRows([]);
-        setTotalRows(0);
-      }
-    } finally {
-      setRowsLoading(false);
-    }
-  }, [
-    usuarioNombre,
-    desde,
-    hasta,
-    paginationModel.page,
-    paginationModel.pageSize,
-    debouncedSearch,
-  ]);
-
-  // Efectos
+  // Cargar negocios (solo superadmin)
   React.useEffect(() => {
-    loadDashboard(); // on mount + cuando cambian fechas
+    if (!isSuperAdmin) return;
+    (async () => {
+      try {
+        setLoadingNegocios(true);
+        const { data } = await api.get("/Negocio/GetNegociosPaged", {
+          params: { page: 1, pageSize: 200, search: "" },
+        });
+        const items = (data?.data?.items ?? data?.data ?? []).map((n: any) => ({
+          id: n.idNegocio ?? n.id,
+          nombre: n.nombre,
+        })) as NegocioOption[];
+        setNegocios(items);
+      } catch {
+        setNegocios([]);
+      } finally {
+        setLoadingNegocios(false);
+      }
+    })();
+  }, [isSuperAdmin]);
+
+  // Cargar dashboard
+  const loadDashboard = React.useCallback(
+    async (overrideIdNegocio?: number | "") => {
+      setLoading(true);
+      setError(null);
+      try {
+        const req: DashboardVentasRequest = {
+          usuarioNombre,
+          desde: desde ? desde.toDate() : undefined,
+          hasta: hasta ? hasta.toDate() : undefined,
+          page: 1,
+          pageSize: 100,
+          search: debouncedSearch || null,
+          idNegocio:
+            typeof overrideIdNegocio === "number"
+              ? overrideIdNegocio
+              : typeof negocioId === "number"
+              ? negocioId
+              : undefined,
+        };
+
+        const res: ServiceResponse<DashboardVentasResponse> =
+          await sellService.getVentasDashboard(req);
+
+        if (res.status === 200 && res.data) {
+          setData(res.data);
+        } else {
+          setError(res.message || "Error al obtener las ventas");
+        }
+      } catch (err: any) {
+        setError(err.message ?? "Error inesperado al cargar el dashboard");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [usuarioNombre, desde, hasta, debouncedSearch, negocioId]
+  );
+
+  // Cargar al iniciar y cuando cambian filtros debounced (search)
+  React.useEffect(() => {
+    loadDashboard();
   }, [loadDashboard]);
 
-  // reset a página 0 cuando cambia el término
-  React.useEffect(() => {
-    setPaginationModel((p) => ({ ...p, page: 0 }));
-  }, [debouncedSearch]);
+  // KPIs
+  const kpis = React.useMemo(() => {
+    if (!data) return [];
+    return [
+      {
+        label: "Ventas",
+        value: String(data.totalVentas),
+        icon: <ShoppingCartIcon sx={{ color: "#60a5fa" }} />,
+      },
+      {
+        label: "Cobrado",
+        value: fmtCurrency(data.totalCobrado),
+        icon: <AttachMoneyIcon sx={{ color: "#34d399" }} />,
+      },
+      {
+        label: "Puntos generados",
+        value: data.puntosGenerados.toFixed(2),
+        icon: <PercentIcon sx={{ color: "#a78bfa" }} />,
+      },
+      {
+        label: "Ticket promedio",
+        value: fmtCurrency(data.ticketPromedio),
+        icon: <TrendingUpIcon sx={{ color: "#f59e0b" }} />,
+      },
+    ];
+  }, [data]);
 
-  // cargar filas cuando cambien search/paginación/fechas
-  React.useEffect(() => {
-    loadRows();
-  }, [loadRows]);
-
-  /* ================== KPIs render helper ================== */
-  const kpiCards = [
-    {
-      label: "Ventas",
-      value: String(kpi.totalVentas),
-      icon: <ShoppingCartIcon sx={{ color: "#60a5fa" }} />,
-    },
-    {
-      label: "Cobrado",
-      value: fmtCurrency(kpi.totalCobrado),
-      icon: <AttachMoneyIcon sx={{ color: "#34d399" }} />,
-    },
-    {
-      label: "Puntos generados",
-      value: kpi.puntosGenerados.toFixed(2),
-      icon: <PercentIcon sx={{ color: "#a78bfa" }} />,
-    },
-    {
-      label: "Ticket promedio",
-      value: fmtCurrency(kpi.ticketPromedio),
-      icon: <TrendingUpIcon sx={{ color: "#f59e0b" }} />,
-    },
-  ];
-
-  /* ================== GRID ================== */
+  // Grid
   const columns: GridColDef<VentaRowDto>[] = [
     { field: "folio", headerName: "Folio", width: 110 },
     { field: "articulo", headerName: "Artículo", width: 140 },
@@ -295,6 +265,42 @@ export default function DashboardPage() {
   ];
 
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
+
+  // Series
+  const ventasPorDia =
+    data?.ventasPorDia?.map((x) => ({ dia: x.dia, ventas: x.ventas })) ?? [];
+
+  // >>> Top artículos (agrega por cantidad). Usa rows.cantidad; si el backend ya manda "unidades", lo usa.
+  const topArticulos =
+    React.useMemo(() => {
+      if (!data) return [];
+
+      // Caso 1: el backend ya trae unidades agregadas
+      if (data.topArticulos?.length && (data.topArticulos as any)[0]?.unidades !== undefined) {
+        return data.topArticulos.map((x, i) => ({
+          name: x.nombre,
+          qty: Number((x as any).unidades),
+          color: SOFT_COLORS[i % SOFT_COLORS.length],
+        }));
+      }
+
+      // Caso 2: agregamos nosotros desde rows.sum(cantidad)
+      const acc = new Map<string, number>();
+      for (const r of data.rows) {
+        const name = r.articulo || "(Sin nombre)";
+        const q = Number((r as any).cantidad ?? 1); // fallback 1 si no vino la cantidad
+        acc.set(name, (acc.get(name) ?? 0) + q);
+      }
+
+      return Array.from(acc.entries())
+        .map(([name, qty], i) => ({
+          name,
+          qty,
+          color: SOFT_COLORS[i % SOFT_COLORS.length],
+        }))
+        .sort((a, b) => b.qty - a.qty)
+        .slice(0, 10);
+    }, [data]);
 
   /* ================== EXPORT HELPERS ================== */
   // Excel (genérico)
@@ -367,7 +373,7 @@ export default function DashboardPage() {
               Dashboard de Ventas
             </Typography>
             <Typography color="text.secondary" fontSize={14}>
-              Filtra por fecha y revisa tus métricas
+              Filtra por fecha, negocio (solo SuperAdmin) y busca en tus ventas
             </Typography>
           </div>
           <Stack direction="row" spacing={1}>
@@ -384,22 +390,62 @@ export default function DashboardPage() {
           </Stack>
         </Stack>
 
-        {/* Filtros (DatePicker) */}
+        {/* Filtros */}
         <Paper sx={{ p: 2.5, borderRadius: 3 }}>
           <Stack
-            direction={{ xs: "column", sm: "row" }}
+            direction={{ xs: "column", lg: "row" }}
             spacing={2}
-            alignItems={{ xs: "stretch", sm: "center" }}
+            alignItems={{ xs: "stretch", lg: "center" }}
           >
+            {/* SUPERADMIN: selector de negocio */}
+            {isSuperAdmin && (
+              <Autocomplete
+                options={negocios}
+                getOptionLabel={(o) => o?.nombre ?? ""}
+                isOptionEqualToValue={(o, v) => o.id === v.id}
+                value={negocios.find((n) => n.id === negocioId) ?? null}
+                onChange={(_, newVal) => {
+                  const nextId = newVal ? newVal.id : "";
+                  setNegocioId(nextId);
+                  loadDashboard(nextId);
+                }}
+                loading={loadingNegocios}
+                clearOnEscape
+                autoHighlight
+                includeInputInList
+                sx={{
+                  minWidth: { sm: 320 },
+                  "& .MuiOutlinedInput-root": { borderRadius: 2 },
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Negocio"
+                    placeholder="Escribe para buscar…"
+                    fullWidth
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {loadingNegocios ? (
+                            <CircularProgress color="inherit" size={18} sx={{ mr: 1 }} />
+                          ) : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+            )}
+
+            {/* Desde / Hasta */}
             <DatePicker
               label="Desde"
               value={desde}
               onChange={(v) => setDesde(v)}
               slotProps={{
-                textField: {
-                  fullWidth: true,
-                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
-                },
+                textField: { fullWidth: true, sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } } },
               }}
             />
             <DatePicker
@@ -407,16 +453,15 @@ export default function DashboardPage() {
               value={hasta}
               onChange={(v) => setHasta(v)}
               slotProps={{
-                textField: {
-                  fullWidth: true,
-                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
-                },
+                textField: { fullWidth: true, sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } } },
               }}
             />
+
+            {/* Botones de acción */}
             <Stack direction="row" spacing={1}>
               <Button
                 variant="contained"
-                onClick={loadDashboard}
+                onClick={() => loadDashboard()}
                 disabled={loading}
                 sx={{ borderRadius: 2, px: 3 }}
               >
@@ -438,19 +483,21 @@ export default function DashboardPage() {
         </Paper>
 
         {/* KPIs */}
-        <Stack direction={{ xs: "column", md: "row" }} gap={2}>
-          {kpiCards.map((k, i) => (
-            <Paper key={i} sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <Typography color="text.secondary">{k.label}</Typography>
-                {k.icon}
-              </Stack>
-              <Typography variant="h5" fontWeight={800} sx={{ mt: 1 }}>
-                {k.value}
-              </Typography>
-            </Paper>
-          ))}
-        </Stack>
+        {data && (
+          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
+            {kpis.map((k, i) => (
+              <Paper key={i} sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Typography color="text.secondary">{k.label}</Typography>
+                  {k.icon}
+                </Stack>
+                <Typography variant="h5" fontWeight={800} sx={{ mt: 1 }}>
+                  {k.value}
+                </Typography>
+              </Paper>
+            ))}
+          </Stack>
+        )}
 
         {/* Charts */}
         <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
@@ -502,7 +549,6 @@ export default function DashboardPage() {
               </Stack>
             </Stack>
 
-            {/* contenedor a capturar */}
             <Box ref={ventasDiaRef} sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}>
               <Box sx={{ height: 260 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -566,7 +612,6 @@ export default function DashboardPage() {
               </Stack>
             </Stack>
 
-            {/* contenedor a capturar */}
             <Box ref={topArtRef} sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}>
               <Box sx={{ height: 260 }}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -574,7 +619,7 @@ export default function DashboardPage() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                     <YAxis />
-                    <Tooltip />
+                    <Tooltip formatter={(v: any) => [Number(v).toFixed(2)]} />
                     <Bar dataKey="qty" radius={[6, 6, 0, 0]}>
                       {topArticulos.map((entry, i) => (
                         <Cell key={i} fill={entry.color} />
@@ -587,40 +632,53 @@ export default function DashboardPage() {
           </Paper>
         </Stack>
 
-        {/* Tabla */}
+        {/* Tabla + Buscador */}
         <Paper sx={{ p: 2.5, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={800} color="primary" sx={{ mb: 1 }}>
-            Ventas recientes
-          </Typography>
-          <Divider sx={{ mb: 2 }} />
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            alignItems={{ xs: "stretch", md: "center" }}
+            justifyContent="space-between"
+            sx={{ mb: 1 }}
+            spacing={2}
+          >
+            <Typography variant="h6" fontWeight={800} color="primary">
+              Ventas recientes
+            </Typography>
 
-          {/* Search + refresh (como “Mis usuarios”) */}
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
-            <TextField
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Buscar por folio, artículo, descripción…"
-              size="small"
-              fullWidth
-              sx={{
-                maxWidth: { xs: "100%", md: 720 },
-                "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
-                "& .MuiOutlinedInput-input": { lineHeight: "44px" },
-              }}
-            />
-            <MuiTooltip title="Refrescar" arrow>
-              <IconButton
+            <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%", maxWidth: 560 }}>
+              <TextField
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPaginationModel((m) => ({ ...m, page: 0 }));
+                }}
+                placeholder="Buscar por folio, artículo, descripción, monto, puntos o cobrado…"
                 size="small"
-                onClick={() => loadRows()}
-                sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}
-              >
-                <RefreshIcon />
-              </IconButton>
-            </MuiTooltip>
+                fullWidth
+                InputProps={{
+                  startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: "text.disabled" }} />,
+                  sx: { borderRadius: 20, height: 44 },
+                }}
+              />
+              <MuiTooltip title="Refrescar tabla" arrow>
+                <IconButton
+                  size="small"
+                  onClick={() => loadDashboard()}
+                  sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}
+                >
+                  <RefreshIcon />
+                </IconButton>
+              </MuiTooltip>
+            </Stack>
           </Stack>
 
-          {error && <Typography color="error" mb={2}>{error}</Typography>}
+          <Divider sx={{ mb: 2 }} />
 
+          {error && (
+            <Typography color="error" mb={2}>
+              {error}
+            </Typography>
+          )}
           {loading ? (
             <Box display="flex" justifyContent="center" py={6}>
               <CircularProgress />
@@ -628,15 +686,12 @@ export default function DashboardPage() {
           ) : (
             <Box sx={{ height: dynamicHeight, width: "100%" }}>
               <DataGrid
-                rows={rows}
+                rows={data?.rows ?? []}
                 columns={columns}
                 getRowId={(r) => r.folio}
-                loading={rowsLoading}
-                disableRowSelectionOnClick
-                rowCount={totalRows}
-                paginationMode="server"
                 paginationModel={paginationModel}
                 onPaginationModelChange={setPaginationModel}
+                disableRowSelectionOnClick
                 pageSizeOptions={[5, 10, 20, 50]}
                 sx={{
                   borderRadius: 3,

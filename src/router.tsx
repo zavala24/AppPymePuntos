@@ -11,9 +11,22 @@ import UsuariosPage from "./pages/usuarios/UsuariosPage";
 import NotificacionesPage from "./pages/notificaciones/NotificacionesPage";
 import ConfigNegocioPage from "./pages/configuracion/negocio/ConfigNegocioPage";
 import ConfigUsuariosAdminPage from "./pages/configuracion/usuarios/ConfigUsuariosAdminPage";
-import RequireRole from "./shared/router/RequireRole";
 import MiNegocioPage from "./pages/mi-negocio/MiNegocioPage";
 import MisUsuariosPage from "./pages/mis-usuarios/MisUsuariosPage";
+import RequireRole from "./shared/router/RequireRole";
+
+// 👇 Asegúrate del import con la ruta real del archivo
+import CustomProductsPage from "./pages/configuracion/personalizar-promocion/CustomProductsPage";
+
+// Pequeño componente para redirigir el index de /configuracion según rol
+function ConfigIndexRedirect() {
+  const role = (localStorage.getItem("pa_role") || "").trim().toLowerCase();
+  const to =
+    role === "superadmin"
+      ? "/configuracion/negocio"
+      : "/configuracion/personalizar-promocion";
+  return <Navigate to={to} replace />;
+}
 
 const router = createBrowserRouter([
   { path: "/login", element: <LoginPage /> },
@@ -29,7 +42,7 @@ const router = createBrowserRouter([
       { index: true, element: <Navigate to="/dashboard" replace /> },
       { path: "dashboard", element: <DashboardPage /> },
 
-      // 👇 Solo SUPERADMIN
+      // Solo SUPERADMIN
       {
         path: "negocios",
         element: (
@@ -39,27 +52,36 @@ const router = createBrowserRouter([
         ),
       },
 
+      // Públicas según tu app
       { path: "usuarios", element: <UsuariosPage /> },
       { path: "notificaciones", element: <NotificacionesPage /> },
-      { path: "mi-negocio", element: (
-              <RequireRole allow={["Admin"]}>
-                <MiNegocioPage />
-              </RequireRole>
-            ),
+
+      // Solo ADMIN
+      {
+        path: "mi-negocio",
+        element: (
+          <RequireRole allow={["Admin"]}>
+            <MiNegocioPage />
+          </RequireRole>
+        ),
       },
-      { path: "mis-usuarios", element: (
-        <RequireRole allow={["Admin"]}>
-          <MisUsuariosPage />
-        </RequireRole>
-      ),
+      {
+        path: "mis-usuarios",
+        element: (
+          <RequireRole allow={["Admin"]}>
+            <MisUsuariosPage />
+          </RequireRole>
+        ),
       },
+
+      // ===== Configuración =====
       {
         path: "configuracion",
         children: [
-          {
-            index: true,
-            element: <Navigate to="/configuracion/negocio" replace />,
-          },
+          // 🔁 Redirección dinámica según rol
+          { index: true, element: <ConfigIndexRedirect /> },
+
+          // 👑 Solo SuperAdmin
           {
             path: "negocio",
             element: (
@@ -76,8 +98,18 @@ const router = createBrowserRouter([
               </RequireRole>
             ),
           },
+
+          // 🟦 Promociones (Admin; si quieres permitir también SuperAdmin, agrega "SuperAdmin")
+          {
+            path: "personalizar-promocion",
+            element: (
+              <RequireRole allow={["Admin"]}>
+                <CustomProductsPage />
+              </RequireRole>
+            ),
+          },
         ],
-      }
+      },
     ],
   },
 
