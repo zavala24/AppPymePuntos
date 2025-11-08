@@ -43,3 +43,40 @@ export interface DashboardVentasResponse {
   ventasPorDia: SerieDiaDto[];
   topArticulos: TopArticuloDto[];
 }
+
+export interface DashboardVentasCustomRequest {
+  /** Id del negocio */
+  idNegocio: number;
+
+  /** Rango de fechas opcional (el back usará DateTime? en C#) */
+  desde?: Date | string | null;
+  hasta?: Date | string | null;
+}
+
+/** Punto (día) de una serie de producto personalizado */
+export interface DashboardVentasCustomPoint {
+  /** Fecha del día (sin hora, ISO o tipo Date) */
+  fecha: string | any;
+  /** Número de ventas del día */
+  ventas: number;
+  /** Monto total cobrado en esas ventas */
+  monto: number;
+  /** Número de canjes realizados en ese día */
+  canjes: number;
+}
+
+/** Serie agrupada por producto personalizado */
+export interface DashboardVentasCustomSeries {
+  /** Id del producto personalizado */
+  idProductoCustom: number;
+  /** Nombre del producto personalizado */
+  nombreProducto: string;
+  /** Puntos de datos diarios */
+  data: DashboardVentasCustomPoint[];
+}
+
+/** Respuesta general del dashboard de promociones personalizadas */
+export interface DashboardVentasCustomResponse {
+  /** Lista de series (una por producto personalizado) */
+  series: DashboardVentasCustomSeries[];
+}

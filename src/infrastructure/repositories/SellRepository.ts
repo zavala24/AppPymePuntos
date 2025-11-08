@@ -2,10 +2,15 @@
 import { api } from "../http/api";
 import { ServiceResponse } from "@/shared/types/service-response";
 import { ISellRepository } from "@/domain/repositories/ISellRepository";
+
 import {
+  DashboardVentasCustomRequest,
+  DashboardVentasCustomResponse,
   DashboardVentasRequest,
   DashboardVentasResponse,
 } from "@/application/dtos/ventas/DashboardVentasDto";
+
+
 
 /** Helper: convierte Date | string | null a ISO string (o undefined) para query */
 function toIsoParam(d?: Date | string | null): string | undefined {
@@ -32,16 +37,31 @@ export class SellRepository implements ISellRepository {
     if (desdeIso) params.desde = desdeIso;
     if (hastaIso) params.hasta = hastaIso;
 
-    // 👇 NUEVO: enviar el search si viene con valor
-    if (req.search && req.search.trim().length > 0) {
-      params.search = req.search.trim();
-    }
+    if (req.search?.trim()) params.search = req.search.trim();
+    if (typeof req.idNegocio === "number" && req.idNegocio > 0) params.idNegocio = req.idNegocio;
 
-    if (typeof req.idNegocio === "number" && req.idNegocio > 0) {
-      params.idNegocio = req.idNegocio;
-    }
     const { data } = await api.get<ServiceResponse<DashboardVentasResponse>>(
       `${this.base}/GetVentasDashboard`,
+      { params }
+    );
+    return data;
+  }
+
+  /** NUEVO: dashboard de promociones personalizadas */
+  async getVentasCustomDashboard(
+    req: DashboardVentasCustomRequest
+  ): Promise<ServiceResponse<DashboardVentasCustomResponse>> {
+    const params: Record<string, any> = {
+      idNegocio: req.idNegocio,
+    };
+
+    const desdeIso = toIsoParam(req.desde);
+    const hastaIso = toIsoParam(req.hasta);
+    if (desdeIso) params.desde = desdeIso;
+    if (hastaIso) params.hasta = hastaIso;
+
+    const { data } = await api.get<ServiceResponse<DashboardVentasCustomResponse>>(
+      `${this.base}/GetVentasCustomDashboard`,
       { params }
     );
     return data;
