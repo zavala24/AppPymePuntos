@@ -12,12 +12,19 @@ import {
   Alert,
   Autocomplete,
   CircularProgress,
+  IconButton,
 } from "@mui/material";
-import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
+import {
+  DataGrid,
+  GridColDef,
+  GridPaginationModel,
+} from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
 import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Close";
 import ShieldIcon from "@mui/icons-material/Security";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import MuiTooltip from "@mui/material/Tooltip";
 
 import { NegocioRepository } from "@/infrastructure/repositories/NegocioRepository";
 import { NegocioService } from "@/application/services/NegocioService";
@@ -234,6 +241,11 @@ export default function ConfigNegocioPage() {
       type: "number",
       align: "center",
       headerAlign: "center",
+      valueFormatter: (params) => {
+        const v = Number(params ?? 0);
+        if (!Number.isFinite(v)) return "—";
+        return `${v.toLocaleString("es-MX")} %`;
+      },
     },
     {
       field: "logoUrl",
@@ -266,7 +278,7 @@ export default function ConfigNegocioPage() {
 
       {/* === FORM === */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, mb: 3 }}>
-        <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
+        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 2 }}>
           {isEditing ? "Editar configuración" : "Nueva configuración"}
         </Typography>
 
@@ -330,55 +342,55 @@ export default function ConfigNegocioPage() {
             </Box>
 
             {/* URL Logo */}
-<Box sx={{ gridColumn: { xs: "1 / -1", md: "1 / 3" } }}>
-  <TextField
-    fullWidth
-    label="URL del logo"
-    type="url"
-    value={form.logoUrl}
-    onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
-    placeholder="https://.../logo.png"
-  />
-</Box>
+            <Box sx={{ gridColumn: { xs: "1 / -1", md: "1 / 3" } }}>
+              <TextField
+                fullWidth
+                label="URL del logo"
+                type="url"
+                value={form.logoUrl}
+                onChange={(e) => setForm((f) => ({ ...f, logoUrl: e.target.value }))}
+                placeholder="https://.../logo.png"
+              />
+            </Box>
 
             {/* Preview logo */}
-<Box
-  sx={{
-    gridColumn: { xs: "1 / -1", md: "3 / 4" },
-    gridRow: { xs: "auto", md: "1 / span 2" }, // ocupa las 2 filas
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    height: { xs: 160, md: "100%" },
-    width: { xs: "100%", md: 220 },
-    position: "relative", // 👈 clave: lo usamos para centrar verticalmente
-    overflow: "hidden",
-    bgcolor: "transparent",
-  }}
->
-  {previewUrl ? (
-    <Box
-      component="img"
-      src={previewUrl}
-      alt="Logo"
-      sx={{
-        position: "absolute",     // 👈 centra respecto al contenedor
-        top: "50%",
-        left: "50%",
-        transform: "translate(-50%, -50%)", // 👈 truco clásico para centrar exacto
-        width: "100%",
-        height: "auto",
-        maxHeight: "100%",
-        objectFit: "contain",
-        display: "block",
-      }}
-    />
-  ) : (
-    <Typography variant="caption" color="text.secondary">
-      Sin logo
-    </Typography>
-  )}
-</Box>
+            <Box
+              sx={{
+                gridColumn: { xs: "1 / -1", md: "3 / 4" },
+                gridRow: { xs: "auto", md: "1 / span 2" },
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                height: { xs: 160, md: "100%" },
+                width: { xs: "100%", md: 220 },
+                position: "relative",
+                overflow: "hidden",
+                bgcolor: "transparent",
+              }}
+            >
+              {previewUrl ? (
+                <Box
+                  component="img"
+                  src={previewUrl}
+                  alt="Logo"
+                  sx={{
+                    position: "absolute",
+                    top: "50%",
+                    left: "50%",
+                    transform: "translate(-50%, -50%)",
+                    width: "100%",
+                    height: "auto",
+                    maxHeight: "100%",
+                    objectFit: "contain",
+                    display: "block",
+                  }}
+                />
+              ) : (
+                <Typography variant="caption" color="text.secondary">
+                  Sin logo
+                </Typography>
+              )}
+            </Box>
           </Box>
 
           {/* Botones */}
@@ -419,10 +431,24 @@ export default function ConfigNegocioPage() {
 
       {/* === GRID === */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
-        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 1 }}>
-          Configuraciones de negocios
-        </Typography>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Typography variant="h6" fontWeight={700} color="primary">
+            Configuraciones de negocios
+          </Typography>
+          <MuiTooltip title="Refrescar">
+            <IconButton
+              size="small"
+              onClick={() => loadConfigs()}
+              sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}
+              aria-label="Refrescar"
+            >
+              <RefreshIcon />
+            </IconButton>
+          </MuiTooltip>
+        </Stack>
+
         <Divider sx={{ mb: 2 }} />
+
         <TextField
           value={search}
           onChange={(e) => {
@@ -434,44 +460,44 @@ export default function ConfigNegocioPage() {
           fullWidth
           sx={{ mb: 3, maxWidth: { xs: "100%", md: 720 } }}
         />
+
         <Box sx={{ height: dynamicHeight, width: "100%" }}>
-        <DataGrid
-          rows={rows}
-          columns={columns}
-          getRowId={(r) => r.id}
-          loading={loading}
-          disableRowSelectionOnClick
-          onRowClick={onRowClick}
-          paginationMode="server"
-          rowCount={rowCount}
-          paginationModel={paginationModel}
-          onPaginationModelChange={setPaginationModel}
-          pageSizeOptions={[5, 10, 20, 50]}
-          // 👇 Zebra igual que en NegociosPage
-          getRowClassName={(p) =>
-            p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd"
-          }
-          sx={{
-            borderRadius: 3,
-            "& .MuiDataGrid-columnHeaders": {
-              backgroundColor: "action.hover",
-              fontWeight: 700,
-            },
-            "& .row-even": { backgroundColor: "#ffffff" },
-            "& .row-odd": { backgroundColor: "rgba(14,165,233,0.06)" },
-            "& .MuiDataGrid-row:hover": {
-              backgroundColor: "rgba(14,165,233,0.12) !important",
-            },
-            // 👇 Quitar el borde/outline azul de foco (que es lo que ves “raro”)
-            "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
-              outline: "none",
-            },
-            "& .MuiDataGrid-columnHeader:focus, & .MuiDataGrid-columnHeader:focus-within":
-              {
+          <DataGrid
+            rows={rows}
+            columns={columns}
+            getRowId={(r) => r.id}
+            loading={loading}
+            disableRowSelectionOnClick
+            onRowClick={onRowClick}
+            paginationMode="server"
+            rowCount={rowCount}
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            pageSizeOptions={[5, 10, 20, 50]}
+            // Locale español (incluye "Filas por página")
+            // Zebra + estilos
+            getRowClassName={(p) =>
+              p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd"
+            }
+            sx={{
+              borderRadius: 3,
+              "& .MuiDataGrid-columnHeaders": {
+                backgroundColor: "action.hover",
+                fontWeight: 700,
+              },
+              "& .row-even": { backgroundColor: "#ffffff" },
+              "& .row-odd": { backgroundColor: "rgba(14,165,233,0.06)" },
+              "& .MuiDataGrid-row:hover": {
+                backgroundColor: "rgba(14,165,233,0.12) !important",
+              },
+              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
                 outline: "none",
               },
-          }}
-        />
+              "& .MuiDataGrid-columnHeader:focus, & .MuiDataGrid-columnHeader:focus-within": {
+                outline: "none",
+              },
+            }}
+          />
         </Box>
       </Paper>
 

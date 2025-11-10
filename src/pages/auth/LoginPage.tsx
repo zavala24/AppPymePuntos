@@ -96,7 +96,7 @@ export default function LoginPage() {
       >
         <Box sx={{ maxWidth: 520 }}>
           <Typography variant="h2" fontWeight={800} color="primary" gutterBottom>
-            PremiaApp Admin
+            PyMe Fiel Admin
           </Typography>
           <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
             Inicia sesión para administrar negocios, usuarios y notificaciones.
@@ -119,6 +119,7 @@ export default function LoginPage() {
               <li>Panel de control con métricas.</li>
               <li>Gestión de negocios y usuarios.</li>
               <li>Notificaciones y configuraciones avanzadas.</li>
+              <li>Promociónes personalizadas.</li>
             </ul>
           </Box>
         </Box>
@@ -160,7 +161,7 @@ export default function LoginPage() {
                 fontWeight: 800,
               }}
             >
-              PA
+              PF
             </Box>
           </Stack>
 
@@ -205,19 +206,6 @@ export default function LoginPage() {
                 }}
               />
 
-              <Stack direction="row" alignItems="center" justifyContent="space-between">
-                <FormControlLabel
-                  control={
-                    <Checkbox
-                      checked={remember}
-                      onChange={(e) => setRemember(e.target.checked)}
-                    />
-                  }
-                  label="Recuérdame"
-                />
-                <Button variant="text" size="small">¿Olvidaste tu contraseña?</Button>
-              </Stack>
-
               <Button
                 type="submit"
                 variant="contained"
@@ -234,7 +222,7 @@ export default function LoginPage() {
           <Divider sx={{ my: 3 }} />
 
           <Typography variant="caption" color="text.secondary" display="block" textAlign="center">
-            © {new Date().getFullYear()} PremiaApp — Todos los derechos reservados
+            © {new Date().getFullYear()} PyMe Fiel — Todos los derechos reservados
           </Typography>
         </Paper>
       </Box>

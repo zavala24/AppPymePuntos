@@ -1,7 +1,7 @@
 import * as React from "react";
 import {
   Box, Paper, Typography, TextField, Button, Chip, Stack,
-  FormControlLabel, Switch, Divider, Snackbar, Alert
+  FormControlLabel, Switch, Divider, Snackbar, Alert, IconButton
 } from "@mui/material";
 import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
@@ -9,7 +9,9 @@ import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Close";
 import ShieldIcon from "@mui/icons-material/Security";
 import CheckIcon from "@mui/icons-material/CheckCircle";
-import CloseIcon from "@mui/icons-material/HighlightOff"; // para cancelar edición
+import CloseIcon from "@mui/icons-material/HighlightOff";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import MuiTooltip from "@mui/material/Tooltip";
 
 import { NegocioRepository } from "../../infrastructure/repositories/NegocioRepository";
 import { NegocioService } from "../../application/services/NegocioService";
@@ -41,6 +43,10 @@ export default function NegociosPage() {
     categoria: "",
     activo: true,
   });
+
+  // Validación visual para nombre requerido
+  const [nameTouched, setNameTouched] = React.useState(false);
+  const nameError = nameTouched && form.nombre.trim().length === 0;
 
   // id que estamos editando (null => modo crear)
   const [editingId, setEditingId] = React.useState<number | null>(null);
@@ -112,8 +118,10 @@ export default function NegociosPage() {
   }, [paginationModel.page, paginationModel.pageSize]);
 
   // ------- Acciones -------
-  const clearForm = () =>
+  const clearForm = () => {
     setForm({ nombre: "", facebook: "", instagram: "", sitio: "", direccion: "", categoria: "", activo: true });
+    setNameTouched(false);
+  };
 
   const onNuevo = () => {
     setEditingId(null);
@@ -128,13 +136,15 @@ export default function NegociosPage() {
   const [saving, setSaving] = React.useState(false);
 
   const onGuardar = async () => {
+    // fuerza validación visual
+    setNameTouched(true);
     if (!form.nombre.trim()) {
       showToast("El nombre es obligatorio.", "error");
       return;
     }
 
     const dto: CreateUpdateNegocioDto = {
-      idNegocio: editingId ?? 0,               // 👈 clave para que el back sepa si es create o update
+      idNegocio: editingId ?? 0,
       nombre: form.nombre.trim(),
       categoria: form.categoria || null,
       facebook: form.facebook || null,
@@ -146,7 +156,7 @@ export default function NegociosPage() {
 
     try {
       setSaving(true);
-      const resp = await negocioService.createOrUpdate(dto);   // 👈 nuevo servicio
+      const resp = await negocioService.createOrUpdate(dto);
 
       if (resp.status === 200 || resp.status === 201) {
         showToast(resp.message || (isEditing ? "Negocio actualizado." : "Negocio creado."), "success");
@@ -177,7 +187,7 @@ export default function NegociosPage() {
       categoria: r.categoria ?? "",
       activo: !!r.activo,
     });
-    // (opcional) scroll al formulario
+    setNameTouched(false);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -228,33 +238,74 @@ export default function NegociosPage() {
       {/* Formulario */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, mb: 3 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-          <Typography variant="h6" fontWeight={700}>
+          <Typography variant="h6" fontWeight={700} color="primary">
             {isEditing ? "Editar negocio" : "Nuevo negocio"}
           </Typography>
         </Stack>
 
         <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField fullWidth label="Nombre *" value={form.nombre}
-            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} />
-          <TextField fullWidth label="Facebook" value={form.facebook}
-            onChange={(e) => setForm((f) => ({ ...f, facebook: e.target.value }))} />
+          <TextField
+            fullWidth
+            required
+            label="Nombre"
+            value={form.nombre}
+            onChange={(e) => {
+              const v = e.target.value;
+              setForm((f) => ({ ...f, nombre: v }));
+              if (!nameTouched) setNameTouched(true);
+            }}
+            onBlur={() => setNameTouched(true)}
+            error={nameError}
+            helperText={nameError ? "El nombre es obligatorio" : " "}
+          />
+          <TextField
+            fullWidth
+            label="Facebook"
+            value={form.facebook}
+            onChange={(e) => setForm((f) => ({ ...f, facebook: e.target.value }))}
+          />
         </Stack>
 
         <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField fullWidth label="Instagram" value={form.instagram}
-            onChange={(e) => setForm((f) => ({ ...f, instagram: e.target.value }))} />
-          <TextField fullWidth label="Sitio web" value={form.sitio}
-            onChange={(e) => setForm((f) => ({ ...f, sitio: e.target.value }))} />
+          <TextField
+            fullWidth
+            label="Instagram"
+            value={form.instagram}
+            onChange={(e) => setForm((f) => ({ ...f, instagram: e.target.value }))}
+          />
+          <TextField
+            fullWidth
+            label="Sitio web"
+            value={form.sitio}
+            onChange={(e) => setForm((f) => ({ ...f, sitio: e.target.value }))}
+          />
         </Stack>
 
-        <TextField fullWidth label="Categoría" value={form.categoria}
-          onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))} sx={{ mb: 2 }} />
+        <TextField
+          fullWidth
+          label="Categoría"
+          value={form.categoria}
+          onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}
+          sx={{ mb: 2 }}
+        />
 
-        <TextField fullWidth multiline minRows={3} label="Dirección" value={form.direccion}
-          onChange={(e) => setForm((f) => ({ ...f, direccion: e.target.value }))} sx={{ mb: 2 }} />
+        <TextField
+          fullWidth
+          multiline
+          minRows={3}
+          label="Dirección"
+          value={form.direccion}
+          onChange={(e) => setForm((f) => ({ ...f, direccion: e.target.value }))}
+          sx={{ mb: 2 }}
+        />
 
         <FormControlLabel
-          control={<Switch checked={form.activo} onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))} />}
+          control={
+            <Switch
+              checked={form.activo}
+              onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))}
+            />
+          }
           label="Activo"
         />
 
@@ -267,7 +318,13 @@ export default function NegociosPage() {
               Cancelar edición
             </Button>
           )}
-          <Button startIcon={<SaveIcon />} variant="contained" color="success" onClick={onGuardar} disabled={saving}>
+          <Button
+            startIcon={<SaveIcon />}
+            variant="contained"
+            color="success"
+            onClick={onGuardar}
+            disabled={saving}
+          >
             {saving ? (isEditing ? "Actualizando..." : "Guardando...") : (isEditing ? "Actualizar" : "Guardar")}
           </Button>
         </Stack>
@@ -275,24 +332,38 @@ export default function NegociosPage() {
 
       {/* Buscador + Grid */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
-        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 1 }}>
-          Negocios dados de alta
-        </Typography>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Typography variant="h6" fontWeight={700} color="primary">
+            Negocios dados de alta
+          </Typography>
+          <MuiTooltip title="Refrescar">
+            <IconButton
+              size="small"
+              onClick={() => loadPage()}
+              sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}
+              aria-label="Refrescar"
+            >
+              <RefreshIcon />
+            </IconButton>
+          </MuiTooltip>
+        </Stack>
+
         <Divider sx={{ mb: 2 }} />
 
-        <TextField
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar negocio..."
-          size="small"
-          fullWidth
-          sx={{
-            mb: 3,
-            maxWidth: { xs: "100%", md: 720 },
-            "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
-            "& .MuiOutlinedInput-input": { lineHeight: "44px" },
-          }}
-        />
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
+          <TextField
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar negocio..."
+            size="small"
+            fullWidth
+            sx={{
+              maxWidth: { xs: "100%", md: 720 },
+              "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
+              "& .MuiOutlinedInput-input": { lineHeight: "44px" },
+            }}
+          />
+        </Stack>
 
         <Box sx={{ height: dynamicHeight, width: "100%" }}>
           <DataGrid
@@ -300,8 +371,8 @@ export default function NegociosPage() {
             columns={columns}
             getRowId={(r) => r.id}
             loading={loading}
-            disableRowSelectionOnClick   // evita checkbox, pero onRowClick funciona
-            onRowClick={onRowClick}      // 👈 selecciona para editar
+            disableRowSelectionOnClick
+            onRowClick={onRowClick}
             paginationMode="server"
             rowCount={rowCount}
             paginationModel={paginationModel}

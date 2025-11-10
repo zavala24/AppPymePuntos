@@ -159,7 +159,7 @@ export default function AppLayout() {
           </IconButton>
 
           <Typography variant="h6" fontWeight={800}>
-            PremiaApp Admin
+            PyMe Fiel Admin
           </Typography>
 
           {/* Bienvenida */}

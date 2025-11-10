@@ -9,4 +9,5 @@ export interface CreateUpdateUserAdminDto {
   idNegocio: number;
   isAdmin: boolean;
   activo: boolean;             
+  passwordNueva?: string | null;
 }

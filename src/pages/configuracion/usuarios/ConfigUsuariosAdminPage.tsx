@@ -1,8 +1,21 @@
 // src/pages/configuracion/usuarios/ConfigUsuariosAdminPage.tsx
 import * as React from "react";
 import {
-  Box, Paper, Typography, TextField, Button, Chip, Stack, Divider,
-  Snackbar, Alert, FormControlLabel, Switch, Autocomplete, CircularProgress
+  Box,
+  Paper,
+  Typography,
+  TextField,
+  Button,
+  Chip,
+  Stack,
+  Divider,
+  Snackbar,
+  Alert,
+  FormControlLabel,
+  Switch,
+  Autocomplete,
+  CircularProgress,
+  IconButton,
 } from "@mui/material";
 import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
@@ -11,6 +24,7 @@ import CancelIcon from "@mui/icons-material/Close";
 import ShieldIcon from "@mui/icons-material/Security";
 import CheckIcon from "@mui/icons-material/CheckCircle";
 import CloseIcon from "@mui/icons-material/HighlightOff";
+import RefreshIcon from "@mui/icons-material/Refresh";
 
 import { NegocioRepository } from "@/infrastructure/repositories/NegocioRepository";
 import { NegocioService } from "@/application/services/NegocioService";
@@ -28,7 +42,6 @@ const userService: IUserService = new UserService(new UserRepository());
 
 type NegOption = { id: number; nombre: string };
 
-// ===== tipos locales grid =====
 type UserRow = {
   id: number;
   usuarioLogin: string;
@@ -42,6 +55,11 @@ type UserRow = {
   isAdmin: boolean;
   activo: boolean;
 };
+
+function isEmail(v: string) {
+  if (!v) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+}
 
 export default function ConfigUsuariosAdminPage() {
   // ---------- Form ----------
@@ -58,7 +76,13 @@ export default function ConfigUsuariosAdminPage() {
     isAdmin: true,
     activo: true,
     negocio: null as NegOption | null,
+    passwordNueva: "",
   });
+
+  // touched/errores
+  const [touched, setTouched] = React.useState<Record<string, boolean>>({});
+  const markTouched = (k: string) => setTouched((t) => ({ ...t, [k]: true }));
+  const resetTouched = () => setTouched({});
 
   const clearForm = () =>
     setForm({
@@ -71,18 +95,27 @@ export default function ConfigUsuariosAdminPage() {
       isAdmin: true,
       activo: true,
       negocio: null,
+      passwordNueva: "",
     });
 
-  const onNuevo = () => { setEditingId(null); clearForm(); };
+  const onNuevo = () => {
+    setEditingId(null);
+    clearForm();
+    resetTouched();
+  };
   const onCancelarEdicion = () => onNuevo();
 
   // ---------- Toast ----------
   const [toastOpen, setToastOpen] = React.useState(false);
   const [toastMsg, setToastMsg] = React.useState("");
   const [toastSeverity, setToastSeverity] = React.useState<"success" | "error">("success");
-  const showToast = (m: string, s: "success" | "error") => { setToastMsg(m); setToastSeverity(s); setToastOpen(true); };
+  const showToast = (m: string, s: "success" | "error") => {
+    setToastMsg(m);
+    setToastSeverity(s);
+    setToastOpen(true);
+  };
 
-  // ---------- Dropdown negocios ----------
+  // ---------- Negocios ----------
   const [negOptions, setNegOptions] = React.useState<NegOption[]>([]);
   const [negLoading, setNegLoading] = React.useState(false);
   const [negQuery, setNegQuery] = React.useState("");
@@ -108,7 +141,9 @@ export default function ConfigUsuariosAdminPage() {
     return () => clearTimeout(t);
   }, [negQuery, fetchNegocios]);
 
-  React.useEffect(() => { fetchNegocios(""); }, [fetchNegocios]);
+  React.useEffect(() => {
+    fetchNegocios("");
+  }, [fetchNegocios]);
 
   // ---------- Grid ----------
   const [rows, setRows] = React.useState<UserRow[]>([]);
@@ -119,13 +154,13 @@ export default function ConfigUsuariosAdminPage() {
 
   const mapToRow = (u: UserAdminDto): UserRow => ({
     id: u.idUsuario,
-    usuarioLogin: u.usuarioNombre,             // del backend
+    usuarioLogin: u.usuarioNombre,
     nombre: u.nombre,
     apellidoPaterno: u.apellidoPaterno,
     apellidoMaterno: u.apellidoMaterno,
     email: u.email ?? "",
     telefono: u.telefono,
-    idNegocio: u.idNegocio ?? 0,               // viene en la respuesta
+    idNegocio: u.idNegocio ?? 0,
     negocio: u.negocioNombre,
     isAdmin: !!u.isAdmin,
     activo: !!u.activo,
@@ -150,16 +185,52 @@ export default function ConfigUsuariosAdminPage() {
     }
   }, [paginationModel.page, paginationModel.pageSize, search]);
 
-  React.useEffect(() => { const t = setTimeout(() => loadPage(), 500); return () => clearTimeout(t); }, [search, loadPage]);
-  React.useEffect(() => { loadPage(); }, [paginationModel.page, paginationModel.pageSize, loadPage]);
+  React.useEffect(() => {
+    const t = setTimeout(() => loadPage(), 500);
+    return () => clearTimeout(t);
+  }, [search, loadPage]);
+
+  React.useEffect(() => {
+    loadPage();
+  }, [paginationModel.page, paginationModel.pageSize, loadPage]);
 
   // ---------- Guardar ----------
   const [saving, setSaving] = React.useState(false);
+
+  const validateRequired = {
+    nombre: form.nombre.trim().length === 0,
+    apellidoPaterno: form.apellidoPaterno.trim().length === 0,
+    telefono: form.telefono.trim().length === 0,
+    usuarioLogin: form.usuarioLogin.trim().length === 0,
+    negocio: !form.negocio,
+  };
+  const invalidEmail = !isEmail(form.email);
+
   const onGuardar = async () => {
-    if (!form.telefono.trim()) { showToast("El teléfono es obligatorio.", "error"); return; }
-    if (!form.nombre.trim() || !form.apellidoPaterno.trim()) { showToast("Nombre y Apellido paterno son obligatorios.", "error"); return; }
-    if (!form.usuarioLogin.trim()) { showToast("El usuario (login) es obligatorio.", "error"); return; }
-    if (!form.negocio) { showToast("Selecciona un negocio.", "error"); return; }
+    // mostrar errores si faltan
+    setTouched({
+      nombre: true,
+      apellidoPaterno: true,
+      telefono: true,
+      usuarioLogin: true,
+      negocio: true,
+      email: true,
+    });
+
+    if (
+      validateRequired.nombre ||
+      validateRequired.apellidoPaterno ||
+      validateRequired.telefono ||
+      validateRequired.usuarioLogin ||
+      validateRequired.negocio
+    ) {
+      showToast("Por favor completa los campos requeridos.", "error");
+      return;
+    }
+    if (invalidEmail) {
+      showToast("Email inválido.", "error");
+      return;
+    }
 
     const dto: CreateUpdateUserAdminDto = {
       idUsuario: editingId ?? 0,
@@ -169,18 +240,24 @@ export default function ConfigUsuariosAdminPage() {
       email: form.email?.trim() ? form.email.trim() : null,
       telefono: form.telefono.trim(),
       usuarioNombre: form.usuarioLogin.trim(),
-      idNegocio: form.negocio.id,
+      idNegocio: form.negocio!.id,
       isAdmin: form.isAdmin,
       activo: form.activo,
+      // si está en edición y capturaron algo, se envía; si no, null para no cambiarla
+      passwordNueva: isEditing && form.passwordNueva.trim() ? form.passwordNueva.trim() : null,
     };
 
     try {
       setSaving(true);
       const resp = await userService.createOrUpdateAdmin(dto);
       if (resp.status === 200 || resp.status === 201) {
-        showToast(resp.message || (isEditing ? "Usuario actualizado." : "Usuario creado."), "success");
-        setEditingId(null);
-        clearForm();
+        showToast(
+          resp.message || (isEditing ? "Usuario y contraseña actualizados correctamente." : "Usuario creado."),
+          "success"
+        );
+        // mantener edición, limpiar password y quitar rojos
+        setForm((f) => ({ ...f, passwordNueva: "" }));
+        resetTouched();
         setPaginationModel((m) => ({ ...m, page: 0 }));
         await loadPage();
       } else {
@@ -193,7 +270,7 @@ export default function ConfigUsuariosAdminPage() {
     }
   };
 
-  // Click fila => editar (carga campos separados + negocio por id)
+  // Click fila => editar
   const onRowClick = (p: any) => {
     const r = p.row as UserRow;
     setEditingId(r.id);
@@ -207,11 +284,13 @@ export default function ConfigUsuariosAdminPage() {
       isAdmin: r.isAdmin,
       activo: r.activo,
       negocio: r.idNegocio ? { id: r.idNegocio, nombre: r.negocio } : null,
+      passwordNueva: "",
     });
+    resetTouched();
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Columnas grid (nombre y apellidos separados)
+  // Columnas grid
   const columns: GridColDef<UserRow>[] = [
     { field: "usuarioLogin", headerName: "Usuario", flex: 0.8 },
     { field: "nombre", headerName: "Nombre", flex: 1 },
@@ -221,16 +300,32 @@ export default function ConfigUsuariosAdminPage() {
     { field: "telefono", headerName: "Teléfono", flex: 0.8 },
     { field: "negocio", headerName: "Negocio", flex: 1 },
     {
-      field: "isAdmin", headerName: "Admin", width: 100, align: "center", headerAlign: "center",
-      renderCell: (p) => p.value ? <CheckIcon color="success" fontSize="small" /> : <CloseIcon color="error" fontSize="small" />
+      field: "isAdmin",
+      headerName: "Admin",
+      width: 100,
+      align: "center",
+      headerAlign: "center",
+      renderCell: (p) =>
+        p.value ? <CheckIcon color="success" fontSize="small" /> : <CloseIcon color="error" fontSize="small" />,
     },
     {
-      field: "activo", headerName: "Activo", width: 100, align: "center", headerAlign: "center",
-      renderCell: (p) => p.value ? <CheckIcon color="success" fontSize="small" /> : <CloseIcon color="error" fontSize="small" />
+      field: "activo",
+      headerName: "Activo",
+      width: 100,
+      align: "center",
+      headerAlign: "center",
+      renderCell: (p) =>
+        p.value ? <CheckIcon color="success" fontSize="small" /> : <CloseIcon color="error" fontSize="small" />,
     },
   ];
 
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
+
+  // Sólo dígitos en teléfono
+  const onTelefonoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const digits = e.target.value.replace(/\D+/g, "");
+    setForm((f) => ({ ...f, telefono: digits }));
+  };
 
   return (
     <Box className="mx-auto w-full max-w-[1800px] px-4 md:px-6 py-4">
@@ -242,71 +337,133 @@ export default function ConfigUsuariosAdminPage() {
 
       {/* Formulario */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, mb: 3 }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-          <Typography variant="h6" fontWeight={700}>{isEditing ? "Editar usuario" : "Nuevo usuario"}</Typography>
-        </Stack>
+        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 1 }}>
+          {isEditing ? "Editar usuario" : "Nuevo usuario"}
+        </Typography>
 
+        {/* Fila 1: Nombre | Apellido paterno */}
         <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField fullWidth required label="Nombre" value={form.nombre}
-            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))} />
-          <TextField fullWidth required label="Apellido paterno" value={form.apellidoPaterno}
-            onChange={(e) => setForm((f) => ({ ...f, apellidoPaterno: e.target.value }))} />
-        </Stack>
-
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField fullWidth label="Apellido materno" value={form.apellidoMaterno}
-            onChange={(e) => setForm((f) => ({ ...f, apellidoMaterno: e.target.value }))} />
-          <TextField fullWidth label="Email" type="email" value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} />
-        </Stack>
-
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField fullWidth required label="Teléfono" value={form.telefono}
-            onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))} />
-          <TextField fullWidth required label="Usuario (login)" value={form.usuarioLogin}
-            onChange={(e) => setForm((f) => ({ ...f, usuarioLogin: e.target.value }))} />
-        </Stack>
-
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <Autocomplete<NegOption, false, false, false>
-            fullWidth
-            loading={negLoading}
-            options={negOptions}
-            value={form.negocio}
-            onChange={(_, v) => setForm((f) => ({ ...f, negocio: v }))}
-            inputValue={negQuery}
-            onInputChange={(_, v) => setNegQuery(v)}
-            getOptionLabel={(o) => o?.nombre ?? ""}
-            isOptionEqualToValue={(opt, val) => opt.id === val.id}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Negocio"
-                required
-                placeholder="Buscar negocio..."
-                InputProps={{
-                  ...params.InputProps,
-                  endAdornment: (
-                    <>
-                      {negLoading ? <CircularProgress size={18} /> : null}
-                      {params.InputProps.endAdornment}
-                    </>
-                  ),
-                }}
-              />
-            )}
+          <TextField
+            fullWidth required label="Nombre" value={form.nombre}
+            onBlur={() => markTouched("nombre")}
+            error={touched.nombre && form.nombre.trim() === ""}
+            helperText={touched.nombre && form.nombre.trim() === "" ? "Obligatorio" : ""}
+            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
           />
+          <TextField
+            fullWidth required label="Apellido paterno" value={form.apellidoPaterno}
+            onBlur={() => markTouched("apellidoPaterno")}
+            error={touched.apellidoPaterno && form.apellidoPaterno.trim() === ""}
+            helperText={touched.apellidoPaterno && form.apellidoPaterno.trim() === "" ? "Obligatorio" : ""}
+            onChange={(e) => setForm((f) => ({ ...f, apellidoPaterno: e.target.value }))}
+          />
+        </Stack>
 
-          <Stack direction="row" alignItems="center" gap={2}>
-            <FormControlLabel
-              control={<Switch checked={form.isAdmin} onChange={(e) => setForm((f) => ({ ...f, isAdmin: e.target.checked }))} />}
-              label="Admin"
+        {/* Fila 2: Apellido materno | Email */}
+        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
+          <TextField
+            fullWidth label="Apellido materno" value={form.apellidoMaterno}
+            onChange={(e) => setForm((f) => ({ ...f, apellidoMaterno: e.target.value }))}
+          />
+          <TextField
+            fullWidth label="Email" type="email" value={form.email}
+            onBlur={() => markTouched("email")}
+            error={touched.email && !isEmail(form.email)}
+            helperText={touched.email && !isEmail(form.email) ? "Correo inválido" : ""}
+            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+          />
+        </Stack>
+
+        {/* Fila 3: Teléfono | Usuario (login) */}
+        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
+          <TextField
+            fullWidth required label="Teléfono" value={form.telefono}
+            onBlur={() => markTouched("telefono")}
+            error={touched.telefono && form.telefono.trim() === ""}
+            helperText={touched.telefono && form.telefono.trim() === "" ? "Obligatorio" : ""}
+            inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
+            onChange={onTelefonoChange}
+          />
+          <TextField
+            fullWidth required label="Usuario (login)" value={form.usuarioLogin}
+            onBlur={() => markTouched("usuarioLogin")}
+            error={touched.usuarioLogin && form.usuarioLogin.trim() === ""}
+            helperText={touched.usuarioLogin && form.usuarioLogin.trim() === "" ? "Obligatorio" : ""}
+            onChange={(e) => setForm((f) => ({ ...f, usuarioLogin: e.target.value }))}
+          />
+        </Stack>
+
+        {/* Fila 4: Negocio (col izq = Teléfono) | Nueva contraseña + switches (col der = Usuario) */}
+        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 1 }}>
+          {/* IZQ: Negocio */}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Autocomplete<NegOption, false, false, false>
+              options={negOptions}
+              loading={negLoading}
+              value={form.negocio}
+              onChange={(_, v) => {
+                setForm((f) => ({ ...f, negocio: v }));
+                markTouched("negocio");
+              }}
+              inputValue={negQuery}
+              onInputChange={(_, v) => setNegQuery(v)}
+              getOptionLabel={(o) => o?.nombre ?? ""}
+              isOptionEqualToValue={(opt, val) => opt.id === val.id}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  fullWidth
+                  label="Negocio"
+                  required
+                  onBlur={() => markTouched("negocio")}
+                  error={touched.negocio && !form.negocio}
+                  helperText={touched.negocio && !form.negocio ? "Selecciona un negocio" : ""}
+                  placeholder="Buscar negocio..."
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {negLoading ? <CircularProgress size={18} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
             />
-            <FormControlLabel
-              control={<Switch checked={form.activo} onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))} />}
-              label="Activo"
+          </Box>
+
+          {/* DER: Nueva contraseña (misma anchura que Usuario) */}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <TextField
+              fullWidth
+              label="Nueva contraseña (solo edición)"
+              value={form.passwordNueva}
+              onChange={(e) => setForm((f) => ({ ...f, passwordNueva: e.target.value }))}
+              disabled={!isEditing}
             />
-          </Stack>
+            {/* leyenda fuera del TextField para no alterar la altura del control */}
+            <Typography variant="caption" color="text.secondary">
+              {isEditing ? "Se actualiza solo si capturas una nueva." : "Se habilita al editar"}
+            </Typography>
+          </Box>
+        </Stack>
+
+        {/* Switches debajo, sin afectar la fila de arriba */}
+        <Stack direction="row" alignItems="center" gap={2} sx={{ mb: 2 }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={form.isAdmin}
+                onChange={(e) => setForm((f) => ({ ...f, isAdmin: e.target.checked }))}
+              />
+            }
+            label="Admin"
+          />
+          <FormControlLabel
+            control={<Switch checked={form.activo} onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))} />}
+            label="Activo"
+          />
         </Stack>
 
         <Stack direction="row" justifyContent="flex-end" gap={1}>
@@ -317,16 +474,19 @@ export default function ConfigUsuariosAdminPage() {
             </Button>
           )}
           <Button startIcon={<SaveIcon />} variant="contained" color="success" onClick={onGuardar} disabled={saving}>
-            {saving ? (isEditing ? "Actualizando..." : "Guardando...") : (isEditing ? "Actualizar" : "Guardar")}
+            {saving ? (isEditing ? "Actualizando..." : "Guardando...") : isEditing ? "Actualizar" : "Guardar"}
           </Button>
         </Stack>
       </Paper>
 
-      {/* Grid */}
+      {/* GRID */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
-        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 1 }}>
-          Usuarios administrativos
-        </Typography>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Typography variant="h6" fontWeight={700} color="primary">Usuarios administrativos</Typography>
+          <IconButton aria-label="Refrescar" onClick={() => loadPage()} sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}>
+            <RefreshIcon />
+          </IconButton>
+        </Stack>
         <Divider sx={{ mb: 2 }} />
 
         <TextField

@@ -1,3 +1,4 @@
+// src/pages/notificaciones/NotificacionesPage.tsx
 import { useMemo, useState, useCallback, useEffect } from "react";
 import {
   Box,
@@ -17,6 +18,7 @@ import {
 import SendIcon from "@mui/icons-material/Send";
 import ImageIcon from "@mui/icons-material/Image";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import ShieldIcon from "@mui/icons-material/Security";
 import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
 
 import type { INotificacionService } from "@/application/services/INotificacionService";
@@ -82,7 +84,7 @@ type GridRow = {
 
 /* ===================== componente ===================== */
 export default function NotificacionesPage() {
-  const idUsuario = getIdUsuarioActual(); // (por si lo necesitas para validaciones futuras)
+  const idUsuario = getIdUsuarioActual();
   const usuarioNombre = getUsuarioNombre();
   const negocioLogo = getNegocioLogo();
 
@@ -137,7 +139,6 @@ export default function NotificacionesPage() {
       setRows([]);
       return;
     }
-
     try {
       setLoading(true);
       const res = await notiService.getByUsuario(usuarioNombre);
@@ -206,7 +207,7 @@ export default function NotificacionesPage() {
     );
   }, [rows, debouncedQuery]);
 
-  // columnas grid (solo Título, Cuerpo, Fecha)
+  // columnas grid
   const columns: GridColDef<GridRow>[] = [
     {
       field: "title",
@@ -251,7 +252,7 @@ export default function NotificacionesPage() {
 
   return (
     <Box className="space-y-4">
-      {/* Header + acciones */}
+      {/* Header + chip admin */}
       <Paper className="p-6 border border-blue-100 rounded-2xl shadow-sm">
         <Stack direction="row" alignItems="center" justifyContent="space-between">
           <div>
@@ -262,22 +263,21 @@ export default function NotificacionesPage() {
               Redacta y envía promociones a los seguidores del negocio.
             </Typography>
           </div>
-          <Button
-            startIcon={<RefreshIcon />}
+
+          {/* 👇 Reemplazo: Chip "Solo ADMIN" (como en tus otras pantallas) */}
+          <Chip
+            icon={<ShieldIcon />}
+            label="Solo ADMIN"
+            color="secondary"
             variant="outlined"
-            onClick={() => {
-              setQuery("");
-              resetForm();
-            }}
-          >
-            Limpiar filtro
-          </Button>
+          />
         </Stack>
 
-        <Divider className="my-4" />
+        {/* Más aire entre el header/divider y las tarjetas */}
+        <Divider sx={{ mt: 2, mb: 3 }} />
 
-        {/* Form + Preview */}
-        <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
+        {/* Form + Preview (más espacio) */}
+        <Stack direction={{ xs: "column", md: "row" }} spacing={3} sx={{ mt: 1 }}>
           {/* Formulario */}
           <Paper className="p-4 flex-1 border border-blue-100 rounded-xl">
             <Stack spacing={2}>
@@ -335,7 +335,6 @@ export default function NotificacionesPage() {
               }}
               variant="outlined"
             >
-              {/* Encabezado simplificado */}
               <Stack direction="row" spacing={1} alignItems="center">
                 <Avatar src={negocioLogo ?? undefined} alt="" sx={{ width: 28, height: 28 }} />
                 <Typography color="text.secondary" fontSize={12}>
@@ -455,11 +454,11 @@ export default function NotificacionesPage() {
       <Snackbar
         open={snackbar.open}
         autoHideDuration={2200}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false })) }
         anchorOrigin={{ vertical: "top", horizontal: "right" }}
       >
         <Alert
-          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
+          onClose={() => setSnackbar((s) => ({ ...s, open: false })) }
           severity={snackbar.type}
           variant="filled"
           sx={{ width: "100%" }}
