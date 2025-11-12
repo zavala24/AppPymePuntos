@@ -7,7 +7,9 @@ import {
   DashboardVentasCustomResponse,
   DashboardVentasRequest,
   DashboardVentasResponse,
+  VentaRowDto,
 } from "../dtos/ventas/DashboardVentasDto";
+import { UpdateVentaFromRowDto } from "../dtos/ventas/UpdateVentaFromRowDto ";
 
 
 export class SellService {
@@ -24,5 +26,9 @@ export class SellService {
     req: DashboardVentasCustomRequest
   ): Promise<ServiceResponse<DashboardVentasCustomResponse>> {
     return this.repo.getVentasCustomDashboard(req);
+  }
+
+    async updateVentaFromRow(dto: UpdateVentaFromRowDto): Promise<ServiceResponse<VentaRowDto>> {
+    return this.repo.updateVentaFromRow(dto);
   }
 }

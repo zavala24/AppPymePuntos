@@ -8,8 +8,9 @@ import {
   DashboardVentasCustomResponse,
   DashboardVentasRequest,
   DashboardVentasResponse,
+  VentaRowDto,
 } from "@/application/dtos/ventas/DashboardVentasDto";
-
+import { UpdateVentaFromRowRequest } from "@/application/dtos/ventas/UpdateVentaFromRowRequest";
 
 
 /** Helper: convierte Date | string | null a ISO string (o undefined) para query */
@@ -38,7 +39,9 @@ export class SellRepository implements ISellRepository {
     if (hastaIso) params.hasta = hastaIso;
 
     if (req.search?.trim()) params.search = req.search.trim();
-    if (typeof req.idNegocio === "number" && req.idNegocio > 0) params.idNegocio = req.idNegocio;
+    if (typeof req.idNegocio === "number" && req.idNegocio > 0) {
+      params.idNegocio = req.idNegocio;
+    }
 
     const { data } = await api.get<ServiceResponse<DashboardVentasResponse>>(
       `${this.base}/GetVentasDashboard`,
@@ -47,7 +50,7 @@ export class SellRepository implements ISellRepository {
     return data;
   }
 
-  /** NUEVO: dashboard de promociones personalizadas */
+  /** Dashboard de promociones personalizadas */
   async getVentasCustomDashboard(
     req: DashboardVentasCustomRequest
   ): Promise<ServiceResponse<DashboardVentasCustomResponse>> {
@@ -60,9 +63,21 @@ export class SellRepository implements ISellRepository {
     if (desdeIso) params.desde = desdeIso;
     if (hastaIso) params.hasta = hastaIso;
 
-    const { data } = await api.get<ServiceResponse<DashboardVentasCustomResponse>>(
-      `${this.base}/GetVentasCustomDashboard`,
-      { params }
+    const { data } =
+      await api.get<ServiceResponse<DashboardVentasCustomResponse>>(
+        `${this.base}/GetVentasCustomDashboard`,
+        { params }
+      );
+    return data;
+  }
+
+  /** NUEVO: Actualiza una venta desde el row seleccionado (admin) */
+  async updateVentaFromRow(
+    req: UpdateVentaFromRowRequest
+  ): Promise<ServiceResponse<VentaRowDto>> {
+    const { data } = await api.put<ServiceResponse<VentaRowDto>>(
+      `${this.base}/UpdateVentaFromRow`,
+      req
     );
     return data;
   }

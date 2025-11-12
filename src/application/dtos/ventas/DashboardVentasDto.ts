@@ -18,6 +18,8 @@ export interface VentaRowDto {
   puntosGenerados: number;
   creadoFecha: string; // ISO en el back; aquí lo tratamos como string
   cobrado: number;
+  esCustom: boolean;
+  telefonoCliente: string;
 }
 
 export interface SerieDiaDto {

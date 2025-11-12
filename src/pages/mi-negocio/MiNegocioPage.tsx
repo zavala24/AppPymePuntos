@@ -14,6 +14,7 @@ import {
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
 import ShieldIcon from "@mui/icons-material/Security";
+import CancelIcon from "@mui/icons-material/Cancel";
 
 import { NegocioRepository } from "@/infrastructure/repositories/NegocioRepository";
 import { NegocioService } from "@/application/services/NegocioService";
@@ -34,7 +35,9 @@ function getIdNegocioActual(): number | null {
     if (payload?.idNegocio && !Number.isNaN(Number(payload.idNegocio))) {
       return Number(payload.idNegocio);
     }
-  } catch { /* noop */ }
+  } catch {
+    /* noop */
+  }
   return null;
 }
 
@@ -73,10 +76,14 @@ export default function MiNegocioPage() {
     urlLogo: "",
   });
 
+  // Snapshot para poder cancelar cambios
+  const [initialForm, setInitialForm] = React.useState<FormState | null>(null);
+
   // -------- Toasts --------
   const [toastOpen, setToastOpen] = React.useState(false);
   const [toastMsg, setToastMsg] = React.useState("");
-  const [toastSeverity, setToastSeverity] = React.useState<"success" | "error">("success");
+  const [toastSeverity, setToastSeverity] =
+    React.useState<"success" | "error">("success");
   const showToast = (m: string, s: "success" | "error") => {
     setToastMsg(m);
     setToastSeverity(s);
@@ -97,7 +104,7 @@ export default function MiNegocioPage() {
       const resp = await negocioService.getWithConfig(id);
       if (resp.status === 200 && resp.data) {
         const d = resp.data as NegocioWithConfigDto;
-        setForm({
+        const nextForm: FormState = {
           nombre: d.nombreNegocio ?? "",
           facebook: d.facebook ?? "",
           instagram: d.instagram ?? "",
@@ -106,10 +113,14 @@ export default function MiNegocioPage() {
           direccion: d.direccion ?? "",
           esActivo: !!d.esActivo,
 
-          permitirConfiguracionPersonalizada: !!(d as any).permitirConfiguracionPersonalizada,
-          porcentajeVentas: d.porcentajeVentas != null ? String(d.porcentajeVentas) : "",
+          permitirConfiguracionPersonalizada: !!(d as any)
+            .permitirConfiguracionPersonalizada,
+          porcentajeVentas:
+            d.porcentajeVentas != null ? String(d.porcentajeVentas) : "",
           urlLogo: d.urlLogo ?? "",
-        });
+        };
+        setForm(nextForm);
+        setInitialForm(nextForm); // ⟵ guardamos snapshot para poder cancelar
       } else {
         showToast(resp.message || "No se pudo cargar la información.", "error");
       }
@@ -142,9 +153,19 @@ export default function MiNegocioPage() {
 
   const percentIsValid =
     form.porcentajeVentas.trim() === "" ||
-    (Number.isFinite(parsedPercent) && parsedPercent >= 0 && parsedPercent <= 100);
+    (Number.isFinite(parsedPercent) &&
+      parsedPercent >= 0 &&
+      parsedPercent <= 100);
 
   const canSave = percentIsValid;
+
+  // -------- Cancelar edición --------
+  const onCancelarEdicion = () => {
+    if (saving || loading) return;
+    if (initialForm) {
+      setForm(initialForm);
+    }
+  };
 
   // -------- Guardar --------
   const onGuardar = async () => {
@@ -171,14 +192,16 @@ export default function MiNegocioPage() {
         direccion: form.direccion || null,
         esActivo: form.esActivo,
         // config
-        permitirConfiguracionPersonalizada: form.permitirConfiguracionPersonalizada,
-        porcentajeVentas: form.porcentajeVentas.trim() === "" ? null : parsedPercent,
+        permitirConfiguracionPersonalizada:
+          form.permitirConfiguracionPersonalizada,
+        porcentajeVentas:
+          form.porcentajeVentas.trim() === "" ? null : parsedPercent,
         urlLogo: form.urlLogo?.trim() || null,
       } as any);
 
       if (resp.status === 200) {
         showToast(resp.message || "Datos guardados.", "success");
-        await loadData();
+        await loadData(); // recarga y actualiza initialForm
         window.scrollTo({ top: 0, behavior: "smooth" });
       } else {
         showToast(resp.message || "No se pudo guardar.", "error");
@@ -198,49 +221,80 @@ export default function MiNegocioPage() {
   // -------- UI --------
   return (
     <Box className="mx-auto w-full max-w-[1800px] px-4 md:px-6 py-4">
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ mb: 2 }}
+      >
         <Typography variant="h4" color="primary">
           Mi negocio
         </Typography>
-        <Chip icon={<ShieldIcon />} label="Solo ADMIN" color="secondary" variant="outlined" />
+        <Chip
+          icon={<ShieldIcon />}
+          label="Solo ADMIN"
+          color="secondary"
+          variant="outlined"
+        />
       </Stack>
 
       {/* Información del negocio */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, mb: 3 }}>
-        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 2 }}>
+        <Typography
+          variant="h6"
+          fontWeight={700}
+          color="primary"
+          sx={{ mb: 2 }}
+        >
           Información del negocio
         </Typography>
 
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          gap={2}
+          sx={{ mb: 2 }}
+        >
           <TextField
             fullWidth
             label="Nombre"
             value={form.nombre}
-            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, nombre: e.target.value }))
+            }
             disabled={loading || saving}
           />
           <TextField
             fullWidth
             label="Facebook"
             value={form.facebook}
-            onChange={(e) => setForm((f) => ({ ...f, facebook: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, facebook: e.target.value }))
+            }
             disabled={loading || saving}
           />
         </Stack>
 
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
+        <Stack
+          direction={{ xs: "column", md: "row" }}
+          gap={2}
+          sx={{ mb: 2 }}
+        >
           <TextField
             fullWidth
             label="Instagram"
             value={form.instagram}
-            onChange={(e) => setForm((f) => ({ ...f, instagram: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, instagram: e.target.value }))
+            }
             disabled={loading || saving}
           />
           <TextField
             fullWidth
             label="Sitio web"
             value={form.sitioWeb}
-            onChange={(e) => setForm((f) => ({ ...f, sitioWeb: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, sitioWeb: e.target.value }))
+            }
             disabled={loading || saving}
           />
         </Stack>
@@ -249,7 +303,9 @@ export default function MiNegocioPage() {
           fullWidth
           label="Categoría"
           value={form.categoria}
-          onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, categoria: e.target.value }))
+          }
           sx={{ mb: 2 }}
           disabled={loading || saving}
         />
@@ -260,7 +316,9 @@ export default function MiNegocioPage() {
           minRows={3}
           label="Dirección"
           value={form.direccion}
-          onChange={(e) => setForm((f) => ({ ...f, direccion: e.target.value }))}
+          onChange={(e) =>
+            setForm((f) => ({ ...f, direccion: e.target.value }))
+          }
           sx={{ mb: 1 }}
           disabled={loading || saving}
         />
@@ -268,7 +326,12 @@ export default function MiNegocioPage() {
 
       {/* Configuración de negocio */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
-        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 1.5 }}>
+        <Typography
+          variant="h6"
+          fontWeight={700}
+          color="primary"
+          sx={{ mb: 1.5 }}
+        >
           Configuración de negocio
         </Typography>
 
@@ -346,7 +409,11 @@ export default function MiNegocioPage() {
               gridRow: { xs: "auto", md: "3 / 4" },
             }}
           >
-            <Typography variant="caption" color="text.secondary" sx={{ px: 0.5 }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ px: 0.5 }}
+            >
               URL del logo
             </Typography>
             <TextField
@@ -357,52 +424,72 @@ export default function MiNegocioPage() {
               InputProps={{ readOnly: true }}
               disabled
             />
-            <Typography variant="caption" color="text.disabled" sx={{ px: 0.5 }}>
+            <Typography
+              variant="caption"
+              color="text.disabled"
+              sx={{ px: 0.5 }}
+            >
               La imagen se usa para mostrar tu marca en la app.
             </Typography>
           </Paper>
 
           {/* Logo: Columna 2, ocupa filas 1 a 3 */}
-<Paper
-  elevation={0}
-  sx={{
-    p: 1.5,
-    borderRadius: 2,
-    border: (t) => `1px solid ${t.palette.divider}`,
-    bgcolor: "#f8fafc",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    gridColumn: { xs: "1 / -1", md: "2 / 3" },
-    gridRow: { xs: "auto", md: "1 / 4" },
-    minHeight: { xs: 200, md: 280 },
-    maxHeight: 300,
-  }}
->
-  {previewUrl ? (
-    <Box
-      component="img"
-      src={previewUrl}
-      alt="Logo"
-      sx={{
-        width: "100%",
-        maxWidth: 250,   // 🔹 antes 520
-        aspectRatio: "1 / 1",
-        objectFit: "contain",
-        display: "block",
-        borderRadius: 2,
-      }}
-    />
-  ) : (
-    <Typography variant="caption" color="text.secondary">
-      Vista previa del logotipo
-    </Typography>
-  )}
-</Paper>
+          <Paper
+            elevation={0}
+            sx={{
+              p: 1.5,
+              borderRadius: 2,
+              border: (t) => `1px solid ${t.palette.divider}`,
+              bgcolor: "#f8fafc",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gridColumn: { xs: "1 / -1", md: "2 / 3" },
+              gridRow: { xs: "auto", md: "1 / 4" },
+              minHeight: { xs: 200, md: 280 },
+              maxHeight: 300,
+            }}
+          >
+            {previewUrl ? (
+              <Box
+                component="img"
+                src={previewUrl}
+                alt="Logo"
+                sx={{
+                  width: "100%",
+                  maxWidth: 250, // antes 520
+                  aspectRatio: "1 / 1",
+                  objectFit: "contain",
+                  display: "block",
+                  borderRadius: 2,
+                }}
+              />
+            ) : (
+              <Typography variant="caption" color="text.secondary">
+                Vista previa del logotipo
+              </Typography>
+            )}
+          </Paper>
         </Box>
 
-        {/* Botón guardar */}
-        <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
+        {/* Botones guardar / cancelar */}
+        <Box
+          sx={{
+            mt: 2,
+            display: "flex",
+            justifyContent: "flex-end",
+            gap: 1,
+          }}
+        >
+          <Button
+            startIcon={<CancelIcon />}
+            variant="outlined"
+            color="warning"
+            onClick={onCancelarEdicion}
+            disabled={loading || saving || !initialForm}
+          >
+            Cancelar edición
+          </Button>
           <Button
             startIcon={<SaveIcon />}
             variant="contained"

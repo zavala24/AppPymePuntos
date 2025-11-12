@@ -12,6 +12,12 @@ import {
   TextField,
   Tabs,
   Tab,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import MuiTooltip from "@mui/material/Tooltip";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -25,6 +31,9 @@ import DownloadIcon from "@mui/icons-material/Download";
 import ImageIcon from "@mui/icons-material/Image";
 import PolylineIcon from "@mui/icons-material/Polyline";
 import SearchIcon from "@mui/icons-material/Search";
+import EditIcon from "@mui/icons-material/Edit";
+import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+import CancelIcon from "@mui/icons-material/Cancel";
 
 import {
   BarChart,
@@ -57,7 +66,6 @@ import { ServiceResponse } from "@/shared/types/service-response";
 import {
   DashboardVentasCustomRequest,
   DashboardVentasCustomResponse,
-  DashboardVentasCustomSeries,
   DashboardVentasRequest,
   DashboardVentasResponse,
   VentaRowDto,
@@ -67,12 +75,21 @@ import { api } from "@/infrastructure/http/api";
 
 const sellService = new SellService(new SellRepository());
 
+// ===== DTO local para actualizar (evita errores si aún no tienes el archivo de tipos) =====
+type UpdateVentaFromRowDto = {
+  folio: number;
+  articulo: string;
+  descripcion: string;
+  monto: number;
+  cantidad: number;
+  idNegocio: number;
+  usuarioNombre: string;
+};
+
 function getIdNegocioActual(): number | undefined {
-  // 1) Primero intentamos el LS directo
   const ls = localStorage.getItem("pa_idNegocio");
   if (ls && !Number.isNaN(Number(ls))) return Number(ls);
 
-  // 2) Si no, del JWT
   const token = localStorage.getItem("pa_token");
   if (!token) return undefined;
 
@@ -102,7 +119,6 @@ function niceBtn() {
     height: 32,
   } as const;
 }
-
 const SOFT_COLORS = [
   "#60a5fa",
   "#34d399",
@@ -117,13 +133,17 @@ const SOFT_COLORS = [
 /* ============ Tipos auxiliares ============ */
 type NegocioOption = { id: number; nombre: string };
 
+// Normaliza truthy para esCustom (boolean/string/num)
+const isCustom = (v: any) =>
+  v === true || v === 1 || String(v).toLowerCase() === "true";
+
 /* ============ Componente principal ============ */
 export default function DashboardPage() {
   const usuarioNombre = localStorage.getItem("pa_user") || "";
   const role = (localStorage.getItem("pa_role") || "").toLowerCase();
   const isSuperAdmin = role === "superadmin";
 
-  // Filtros con DatePicker (Dayjs) -> HOY–HOY por defecto
+  // Filtros con DatePicker (Dayjs)
   const [desde, setDesde] = React.useState<Dayjs | null>(dayjs().startOf("day"));
   const [hasta, setHasta] = React.useState<Dayjs | null>(dayjs().endOf("day"));
 
@@ -133,7 +153,7 @@ export default function DashboardPage() {
   const [negocioId, setNegocioId] = React.useState<number | "">("");
 
   // ====== pestañas SOLO para gráficas
-  const [chartsTab, setChartsTab] = React.useState<0 | 1>(0); // 0 = Ventas, 1 = Ventas Promociones
+  const [chartsTab, setChartsTab] = React.useState<0 | 1>(0);
 
   // Datos normales
   const [data, setData] = React.useState<DashboardVentasResponse | null>(null);
@@ -145,16 +165,16 @@ export default function DashboardPage() {
   const [loadingCustom, setLoadingCustom] = React.useState(false);
   const [errorCustom, setErrorCustom] = React.useState<string | null>(null);
 
-  // Grid: paginación y búsqueda
+  // Grid: paginación, búsqueda y loading local (solo filas)
   const [paginationModel, setPaginationModel] =
     React.useState<GridPaginationModel>({
       page: 0,
       pageSize: 5,
     });
+  const [loadingRows, setLoadingRows] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
 
-  // Debounce del search
   React.useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
     return () => clearTimeout(t);
@@ -164,6 +184,162 @@ export default function DashboardPage() {
   const ventasDiaRef = React.useRef<HTMLDivElement>(null);
   const topArtRef = React.useRef<HTMLDivElement>(null);
   const promoChartRef = React.useRef<HTMLDivElement>(null);
+
+  // ======= MODAL DE EDICIÓN =======
+  const [editOpen, setEditOpen] = React.useState(false);
+  const [editSaving, setEditSaving] = React.useState(false);
+  const [editError, setEditError] = React.useState<string | null>(null);
+
+  type EditForm = {
+    folio: number;
+    articulo: string;
+    descripcion: string;
+    monto: string;     // mantenemos string para facilitar validación
+    cantidad: string;  // idem
+  };
+
+  const [editForm, setEditForm] = React.useState<EditForm>({
+    folio: 0,
+    articulo: "",
+    descripcion: "",
+    monto: "",
+    cantidad: "",
+  });
+
+  // Snapshot para poder revertir al cancelar
+  const [editInitialForm, setEditInitialForm] = React.useState<EditForm | null>(null);
+
+  // ===== Toasts =====
+  const [toastOpen, setToastOpen] = React.useState(false);
+  const [toastMsg, setToastMsg] = React.useState("");
+  const [toastSeverity, setToastSeverity] =
+    React.useState<"success" | "error">("success");
+
+  const showToast = (m: string, s: "success" | "error") => {
+    setToastMsg(m);
+    setToastSeverity(s);
+    setToastOpen(true);
+  };
+
+  const openEditModal = (row: VentaRowDto) => {
+    const initial: EditForm = {
+      folio: Number(row.folio),
+      articulo: row.articulo || "",
+      descripcion: row.descripcion || "",
+      // mostramos con máximo 2 decimales si vienen en número
+      monto: row.monto != null ? Number(row.monto).toFixed(2) : "",
+      cantidad: String((row as any).cantidad ?? "1"),
+    };
+    setEditInitialForm(initial);
+    setEditForm(initial);
+    setEditError(null);
+    setEditOpen(true);
+  };
+
+  const closeEditModal = () => {
+    if (editSaving) return;
+    setEditOpen(false);
+  };
+
+  const onEditChange =
+    (key: "articulo" | "descripcion" | "monto" | "cantidad") =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      setEditForm((f) => ({ ...f, [key]: e.target.value }));
+    };
+
+  // === Sólo números con hasta 2 decimales (coma se normaliza a punto)
+  const onNumericChange =
+    (key: "monto" | "cantidad") =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      let v = e.target.value.replace(",", ".");     // coma -> punto
+      // quitar caracteres inválidos
+      v = v.replace(/[^\d.]/g, "");
+      // permitir solo un punto decimal
+      const firstDot = v.indexOf(".");
+      if (firstDot !== -1) {
+        const head = v.slice(0, firstDot + 1);
+        const tail = v.slice(firstDot + 1).replace(/\./g, "");
+        v = head + tail;
+      }
+      // limitar a 2 decimales
+      const m = v.match(/^(\d+)(?:\.(\d{0,2}))?$/);
+      if (!v || m) {
+        setEditForm((f) => ({ ...f, [key]: v }));
+      }
+      // si intenta poner más de 2 decimales, ignoramos el extra
+    };
+
+  const commitEdit = async () => {
+    const idNegocio =
+      typeof negocioId === "number"
+        ? negocioId
+        : getIdNegocioActual() ?? 0;
+
+    // === Requeridos
+    if (!editForm.articulo.trim()) {
+      setEditError("El artículo es obligatorio.");
+      return;
+    }
+    if (!editForm.monto.trim()) {
+      setEditError("El monto es obligatorio.");
+      return;
+    }
+    if (!editForm.cantidad.trim()) {
+      setEditError("La cantidad es obligatoria.");
+      return;
+    }
+
+    // Normalización + validación numérica
+    const monto = Number(editForm.monto.replace(",", "."));
+    const cantidad = Number(editForm.cantidad.replace(",", "."));
+
+    if (!(Number.isFinite(monto) && monto > 0)) {
+      setEditError("El monto debe ser un número mayor a 0 y con máximo 2 decimales.");
+      return;
+    }
+    if (!(Number.isFinite(cantidad) && cantidad > 0)) {
+      setEditError("La cantidad debe ser un número mayor a 0 y con máximo 2 decimales.");
+      return;
+    }
+
+    const dto: UpdateVentaFromRowDto = {
+      folio: editForm.folio,
+      articulo: editForm.articulo.trim(),
+      descripcion: editForm.descripcion.trim(),
+      monto: Number(monto.toFixed(2)),
+      cantidad: Number(cantidad.toFixed(2)),
+      idNegocio,
+      usuarioNombre,
+    };
+
+    try {
+      setEditSaving(true);
+      const resp = await sellService.updateVentaFromRow(dto as any);
+
+      if (resp.status === 200 && resp.data) {
+        await refreshGridRowsOnly();
+        setEditOpen(false);
+        showToast(resp.message || "Datos guardados con éxito.", "success");
+      } else {
+        const msg = resp.message || "No se pudo actualizar la venta.";
+        setEditError(msg);
+        showToast(msg, "error");
+      }
+    } catch (e: any) {
+      const msg = e?.message ?? "Error de red al actualizar.";
+      setEditError(msg);
+      showToast(msg, "error");
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  // Cancelar: revierte y cierra
+  const onCancelarEdicion = () => {
+    if (editSaving) return;
+    if (editInitialForm) setEditForm(editInitialForm);
+    setEditOpen(false);
+  };
 
   // Cargar negocios (solo superadmin)
   React.useEffect(() => {
@@ -187,7 +363,7 @@ export default function DashboardPage() {
     })();
   }, [isSuperAdmin]);
 
-  // Cargar dashboard normal
+  // Cargar dashboard normal (KPIs, charts, grid completo)
   const loadDashboard = React.useCallback(
     async (overrideIdNegocio?: number | "") => {
       setLoading(true);
@@ -198,7 +374,7 @@ export default function DashboardPage() {
             ? overrideIdNegocio
             : typeof negocioId === "number"
             ? negocioId
-            : getIdNegocioActual(); // 👈 fallback real
+            : getIdNegocioActual();
 
         const req: DashboardVentasRequest = {
           usuarioNombre,
@@ -255,6 +431,38 @@ export default function DashboardPage() {
     [desde, hasta, negocioId]
   );
 
+  // Refrescar SOLO las filas del grid, manteniendo KPIs y gráficas
+  const refreshGridRowsOnly = React.useCallback(async () => {
+    try {
+      setLoadingRows(true);
+      const selectedIdNegocio =
+        typeof negocioId === "number" ? negocioId : getIdNegocioActual();
+
+      const req: DashboardVentasRequest = {
+        usuarioNombre,
+        desde: desde ? desde.toDate() : undefined,
+        hasta: hasta ? hasta.toDate() : undefined,
+        page: 1,
+        pageSize: 100,
+        search: debouncedSearch || null,
+        idNegocio: selectedIdNegocio ?? 0,
+      };
+
+      const res: ServiceResponse<DashboardVentasResponse> =
+        await sellService.getVentasDashboard(req);
+
+      if (res.status === 200 && res.data) {
+        setData((prev) =>
+          prev
+            ? { ...prev, rows: res.data.rows }
+            : res.data
+        );
+      }
+    } finally {
+      setLoadingRows(false);
+    }
+  }, [usuarioNombre, desde, hasta, debouncedSearch, negocioId]);
+
   // Cargar al iniciar y cuando cambian filtros
   React.useEffect(() => {
     loadDashboard();
@@ -272,18 +480,78 @@ export default function DashboardPage() {
     ];
   }, [data]);
 
-  // Grid
+  // Columnas del grid (se agrega la de Editar al inicio)
   const columns: GridColDef<VentaRowDto>[] = [
-    { field: "folio", headerName: "Folio", width: 110 },
+    { field: "folio", headerName: "Folio", width: 80 },
     { field: "articulo", headerName: "Artículo", width: 140 },
     { field: "descripcion", headerName: "Descripción", flex: 1, minWidth: 160 },
-    { field: "monto", headerName: "Monto", width: 140, align: "center", headerAlign: "center",
-      valueFormatter: (p) => fmtCurrency(p as number) },
-    { field: "puntosGenerados", headerName: "Puntos", width: 120, align: "center", headerAlign: "center",
-      valueFormatter: (p) => Number(p as number).toFixed(2) },
-    { field: "cobrado", headerName: "Cobrado", width: 140, align: "center", headerAlign: "center",
-      valueFormatter: (p) => fmtCurrency(p as number) },
+    { field: "telefonoCliente", headerName: "Teléfono", width: 100 },
+    {
+      field: "monto",
+      headerName: "Monto",
+      width: 140,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => fmtCurrency(p as number),
+    },
+    {
+      field: "puntosGenerados",
+      headerName: "Puntos",
+      width: 120,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => Number(p as number).toFixed(2),
+    },
+    {
+      field: "cobrado",
+      headerName: "Cobrado",
+      width: 140,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => fmtCurrency(p as number),
+    },
     { field: "creadoFecha", headerName: "Fecha", width: 160, valueFormatter: (p) => fmtDate(p as string) },
+    {
+      field: "esCustom",
+      headerName: "Personalizado",
+      width: 130,
+      align: "center",
+      headerAlign: "center",
+      sortable: true,
+      renderCell: (p) =>
+        isCustom(p.row.esCustom) ? (
+          <MuiTooltip title="Producto personalizado" arrow>
+            <AutoFixHighIcon sx={{ color: "#a78bfa" }} />
+          </MuiTooltip>
+        ) : null,
+    },
+    {
+      field: "editar",
+      headerName: "Editar",
+      width: 90,
+      sortable: false,
+      filterable: false,
+      align: "center",
+      headerAlign: "center",
+      renderCell: (p) => {
+        const custom = isCustom(p.row.esCustom);
+        return (
+          <MuiTooltip title={custom ? "No editable (personalizado)" : "Editar venta"} arrow>
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => !custom && openEditModal(p.row)}
+                aria-label="Editar"
+                sx={{ color: "primary.main" }}
+                disabled={custom}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </MuiTooltip>
+        );
+      },
+    },
   ];
 
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
@@ -374,7 +642,7 @@ export default function DashboardPage() {
     URL.revokeObjectURL(url);
   };
 
-  // ===== Promociones: dataset combinado por día (para barras apiladas)
+  // ===== Promociones
   const promoCombinedData = React.useMemo(() => {
     if (!customData?.series?.length) return [];
     const allDates = new Set<string>();
@@ -422,7 +690,11 @@ export default function DashboardPage() {
             <MuiTooltip title="Refrescar" arrow>
               <IconButton
                 size="small"
-                onClick={() => { loadDashboard(); loadCustomDashboard(); }}
+                onClick={() => {
+                  // Refresca KPIs, gráficas y grid
+                  loadDashboard();
+                  loadCustomDashboard();
+                }}
                 aria-label="Refrescar"
                 sx={{ ml: 1, color: "primary.main", "&:hover": { color: "primary.dark" } }}
               >
@@ -488,11 +760,14 @@ export default function DashboardPage() {
             <Stack direction="row" spacing={1}>
               <Button
                 variant="contained"
-                onClick={() => { loadDashboard(); loadCustomDashboard(); }}
+                onClick={() => {
+                  loadDashboard();
+                  loadCustomDashboard();
+                }}
                 disabled={loading || loadingCustom}
                 sx={{ borderRadius: 2, px: 3 }}
               >
-                {(loading || loadingCustom) ? <CircularProgress size={20} /> : "Filtrar"}
+                {loading || loadingCustom ? <CircularProgress size={20} /> : "Filtrar"}
               </Button>
               <Button
                 variant="outlined"
@@ -511,7 +786,7 @@ export default function DashboardPage() {
           </Stack>
         </Paper>
 
-        {/* KPIs SIEMPRE visibles */}
+        {/* KPIs */}
         {data && (
           <Stack direction={{ xs: "column", md: "row" }} gap={2}>
             {kpis.map((k, i) => (
@@ -545,25 +820,50 @@ export default function DashboardPage() {
           <Box sx={{ p: 2 }}>
             {chartsTab === 0 ? (
               <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
-                {/* Ventas por día (BARRAS con color) */}
+                {/* Ventas por día */}
                 <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
                   <Stack direction="row" alignItems="center" justifyContent="space-between">
                     <div>
-                      <Typography fontWeight={800} color="primary">Ventas por día</Typography>
-                      <Typography variant="caption" color="text.secondary">Últimos resultados por fecha</Typography>
+                      <Typography fontWeight={800} color="primary">
+                        Ventas por día
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Últimos resultados por fecha
+                      </Typography>
                     </div>
                     <Stack direction="row" spacing={1}>
                       <MuiTooltip title="Excel (datos de la gráfica)" arrow>
-                        <Button variant="outlined" size="small" startIcon={<DownloadIcon />}
-                                onClick={onExportVentasDiaXlsx} sx={niceBtn()}>Excel</Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<DownloadIcon />}
+                          onClick={onExportVentasDiaXlsx}
+                          sx={niceBtn()}
+                        >
+                          Excel
+                        </Button>
                       </MuiTooltip>
                       <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
-                        <Button variant="outlined" size="small" startIcon={<ImageIcon />}
-                                onClick={() => savePng(ventasDiaRef, "ventas_por_dia")} sx={niceBtn()}>PNG</Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<ImageIcon />}
+                          onClick={() => savePng(ventasDiaRef, "ventas_por_dia")}
+                          sx={niceBtn()}
+                        >
+                          PNG
+                        </Button>
                       </MuiTooltip>
                       <MuiTooltip title="SVG (vector editable)" arrow>
-                        <Button variant="outlined" size="small" startIcon={<PolylineIcon />}
-                                onClick={() => saveSvg(ventasDiaRef, "ventas_por_dia")} sx={niceBtn()}>SVG</Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<PolylineIcon />}
+                          onClick={() => saveSvg(ventasDiaRef, "ventas_por_dia")}
+                          sx={niceBtn()}
+                        >
+                          SVG
+                        </Button>
                       </MuiTooltip>
                     </Stack>
                   </Stack>
@@ -591,21 +891,46 @@ export default function DashboardPage() {
                 <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
                   <Stack direction="row" alignItems="center" justifyContent="space-between">
                     <div>
-                      <Typography fontWeight={800} color="primary">Artículos más vendidos</Typography>
-                      <Typography variant="caption" color="text.secondary">Top por cantidad</Typography>
+                      <Typography fontWeight={800} color="primary">
+                        Artículos más vendidos
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Top por cantidad
+                      </Typography>
                     </div>
                     <Stack direction="row" spacing={1}>
                       <MuiTooltip title="Excel (datos de la gráfica)" arrow>
-                        <Button variant="outlined" size="small" startIcon={<DownloadIcon />}
-                                onClick={onExportTopArtXlsx} sx={niceBtn()}>Excel</Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<DownloadIcon />}
+                          onClick={onExportTopArtXlsx}
+                          sx={niceBtn()}
+                        >
+                          Excel
+                        </Button>
                       </MuiTooltip>
                       <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
-                        <Button variant="outlined" size="small" startIcon={<ImageIcon />}
-                                onClick={() => savePng(topArtRef, "top_articulos")} sx={niceBtn()}>PNG</Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<ImageIcon />}
+                          onClick={() => savePng(topArtRef, "top_articulos")}
+                          sx={niceBtn()}
+                        >
+                          PNG
+                        </Button>
                       </MuiTooltip>
                       <MuiTooltip title="SVG (vector editable)" arrow>
-                        <Button variant="outlined" size="small" startIcon={<PolylineIcon />}
-                                onClick={() => saveSvg(topArtRef, "top_articulos")} sx={niceBtn()}>SVG</Button>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<PolylineIcon />}
+                          onClick={() => saveSvg(topArtRef, "top_articulos")}
+                          sx={niceBtn()}
+                        >
+                          SVG
+                        </Button>
                       </MuiTooltip>
                     </Stack>
                   </Stack>
@@ -619,7 +944,9 @@ export default function DashboardPage() {
                           <YAxis />
                           <Tooltip formatter={(v: any) => [Number(v).toFixed(2)]} />
                           <Bar dataKey="qty" radius={[6, 6, 0, 0]}>
-                            {topArticulos.map((entry, i) => <Cell key={i} fill={entry.color} />)}
+                            {topArticulos.map((entry, i) => (
+                              <Cell key={i} fill={entry.color} />
+                            ))}
                           </Bar>
                         </BarChart>
                       </ResponsiveContainer>
@@ -628,7 +955,7 @@ export default function DashboardPage() {
                 </Paper>
               </Stack>
             ) : (
-              // TAB: Ventas Promociones (BARRAS APILADAS)
+              // TAB: Ventas Promociones
               <Paper sx={{ p: 2.5, borderRadius: 3 }}>
                 <Stack direction="row" alignItems="center" justifyContent="space-between">
                   <div>
@@ -641,16 +968,57 @@ export default function DashboardPage() {
                   </div>
                   <Stack direction="row" spacing={1}>
                     <MuiTooltip title="Excel (datos de las series)" arrow>
-                      <Button variant="outlined" size="small" startIcon={<DownloadIcon />}
-                              onClick={onExportPromosXlsx} sx={niceBtn()}>Excel</Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<DownloadIcon />}
+                        onClick={() => {
+                          if (!customData?.series?.length) return;
+                          const combined = promoCombinedData.map((r) => ({ ...r }));
+                          const perSeries = customData.series.map((s) => ({
+                            name: s.nombreProducto.slice(0, 31),
+                            rows: s.data.map((p) => ({
+                              Fecha: p.fecha,
+                              Ventas: p.ventas,
+                              Monto: p.monto,
+                              Canjes: p.canjes,
+                            })),
+                          }));
+                          const wb = XLSX.utils.book_new();
+                          const add = (name: string, rows: any[]) => {
+                            const ws = XLSX.utils.json_to_sheet(rows);
+                            XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+                          };
+                          add("Promociones_por_dia", combined);
+                          perSeries.forEach((s) => add(s.name, s.rows));
+                          XLSX.writeFile(wb, `promos_custom_${new Date().toISOString().slice(0, 10)}.xlsx`);
+                        }}
+                        sx={niceBtn()}
+                      >
+                        Excel
+                      </Button>
                     </MuiTooltip>
                     <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
-                      <Button variant="outlined" size="small" startIcon={<ImageIcon />}
-                              onClick={() => savePng(promoChartRef, "promos_por_dia")} sx={niceBtn()}>PNG</Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<ImageIcon />}
+                        onClick={() => savePng(promoChartRef, "promos_por_dia")}
+                        sx={niceBtn()}
+                      >
+                        PNG
+                      </Button>
                     </MuiTooltip>
                     <MuiTooltip title="SVG (vector editable)" arrow>
-                      <Button variant="outlined" size="small" startIcon={<PolylineIcon />}
-                              onClick={() => saveSvg(promoChartRef, "promos_por_dia")} sx={niceBtn()}>SVG</Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<PolylineIcon />}
+                        onClick={() => saveSvg(promoChartRef, "promos_por_dia")}
+                        sx={niceBtn()}
+                      >
+                        SVG
+                      </Button>
                     </MuiTooltip>
                   </Stack>
                 </Stack>
@@ -658,7 +1026,9 @@ export default function DashboardPage() {
                 <Box ref={promoChartRef} sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}>
                   {errorCustom && <Typography color="error" mb={1}>{errorCustom}</Typography>}
                   {loadingCustom ? (
-                    <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>
+                    <Box display="flex" justifyContent="center" py={6}>
+                      <CircularProgress />
+                    </Box>
                   ) : (
                     <Box sx={{ height: 340 }}>
                       <ResponsiveContainer width="100%" height="100%">
@@ -687,7 +1057,7 @@ export default function DashboardPage() {
           </Box>
         </Paper>
 
-        {/* ========= Tabla (siempre visible) ========= */}
+        {/* ========= Tabla ========= */}
         <Paper sx={{ p: 2.5, borderRadius: 3 }}>
           <Stack
             direction={{ xs: "column", md: "row" }}
@@ -703,7 +1073,10 @@ export default function DashboardPage() {
             <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%", maxWidth: 560 }}>
               <TextField
                 value={search}
-                onChange={(e) => { setSearch(e.target.value); setPaginationModel((m) => ({ ...m, page: 0 })); }}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPaginationModel((m) => ({ ...m, page: 0 }));
+                }}
                 placeholder="Buscar por folio, artículo, descripción, monto, puntos o cobrado…"
                 size="small"
                 fullWidth
@@ -715,7 +1088,7 @@ export default function DashboardPage() {
               <MuiTooltip title="Refrescar tabla" arrow>
                 <IconButton
                   size="small"
-                  onClick={() => loadDashboard()}
+                  onClick={refreshGridRowsOnly}
                   sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}
                 >
                   <RefreshIcon />
@@ -728,8 +1101,10 @@ export default function DashboardPage() {
 
           {error && <Typography color="error" mb={2}>{error}</Typography>}
 
-          {loading ? (
-            <Box display="flex" justifyContent="center" py={6}><CircularProgress /></Box>
+          {(loading && !data) ? (
+            <Box display="flex" justifyContent="center" py={6}>
+              <CircularProgress />
+            </Box>
           ) : (
             <Box sx={{ height: dynamicHeight, width: "100%" }}>
               <DataGrid
@@ -740,6 +1115,7 @@ export default function DashboardPage() {
                 onPaginationModelChange={setPaginationModel}
                 disableRowSelectionOnClick
                 pageSizeOptions={[5, 10, 20, 50]}
+                loading={loadingRows || (loading && !!data)}
                 sx={{
                   borderRadius: 3,
                   "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
@@ -753,6 +1129,107 @@ export default function DashboardPage() {
           )}
         </Paper>
       </Box>
+
+      {/* ===== Modal de edición ===== */}
+      <Dialog open={editOpen} onClose={closeEditModal} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 800, color: "primary.main" }}>
+          Editar venta
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Folio"
+              fullWidth
+              value={editForm.folio}
+              disabled
+            />
+            <TextField
+              label="Artículo "
+              fullWidth
+              value={editForm.articulo}
+              onChange={onEditChange("articulo")}
+              required
+            />
+          </Stack>
+
+          <TextField
+            label="Descripción"
+            fullWidth
+            sx={{ mt: 2 }}
+            value={editForm.descripcion}
+            onChange={onEditChange("descripcion")}
+          />
+
+          <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mt: 2 }}>
+            <TextField
+              label="Monto "
+              fullWidth
+              inputMode="decimal"
+              value={editForm.monto}
+              onChange={onNumericChange("monto")}
+              placeholder="Ej. 55.00"
+              inputProps={{ pattern: "^[0-9]+(\\.[0-9]{0,2})?$" }}
+              required
+            />
+            <TextField
+              label="Cantidad"
+              fullWidth
+              inputMode="decimal"
+              value={editForm.cantidad}
+              onChange={onNumericChange("cantidad")}
+              placeholder="Ej. 1"
+              inputProps={{ pattern: "^[0-9]+(\\.[0-9]{0,2})?$" }}
+              required
+            />
+          </Stack>
+
+          {!!editError && (
+            <Typography color="error" sx={{ mt: 2 }}>
+              {editError}
+            </Typography>
+          )}
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+            Solo se modificarán Artículo, Descripción, Monto y Cantidad. Los puntos y el
+            total cobrado se recalculan automáticamente.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button
+            startIcon={<CancelIcon />}
+            variant="outlined"
+            color="warning"
+            onClick={onCancelarEdicion}
+            disabled={editSaving}
+          >
+            Cancelar edición
+          </Button>
+          <Button
+            variant="contained"
+            onClick={commitEdit}
+            disabled={editSaving}
+            startIcon={editSaving ? <CircularProgress size={16} /> : undefined}
+          >
+            {editSaving ? "Guardando…" : "Guardar cambios"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* TOAST */}
+      <Snackbar
+        open={toastOpen}
+        autoHideDuration={2200}
+        onClose={() => setToastOpen(false)}
+        anchorOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => setToastOpen(false)}
+          severity={toastSeverity}
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
+          {toastMsg}
+        </Alert>
+      </Snackbar>
     </LocalizationProvider>
   );
 }

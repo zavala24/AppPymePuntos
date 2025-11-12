@@ -5,7 +5,9 @@ import {
   DashboardVentasCustomResponse,
   DashboardVentasRequest,
   DashboardVentasResponse,
+  VentaRowDto,
 } from "@/application/dtos/ventas/DashboardVentasDto";
+import { UpdateVentaFromRowDto } from "../dtos/ventas/UpdateVentaFromRowDto ";
 
 
 
@@ -18,4 +20,6 @@ export interface ISellService {
   getVentasCustomDashboard(
     req: DashboardVentasCustomRequest
   ): Promise<ServiceResponse<DashboardVentasCustomResponse>>;
+
+  updateVentaFromRow(dto: UpdateVentaFromRowDto): Promise<ServiceResponse<VentaRowDto>>;
 }
