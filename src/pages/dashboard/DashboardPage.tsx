@@ -106,10 +106,24 @@ function getIdNegocioActual(): number | undefined {
 function fmtCurrency(n: number) {
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 }
+
+// Para la columna de fecha del grid
 function fmtDate(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleString("es-MX", { dateStyle: "medium" });
+  return d.toLocaleDateString("es-MX", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
 }
+
+// Para ejes X de gráficas (12-nov-2025)
+function fmtDateAxis(value: string) {
+  const d = dayjs(value);
+  if (!d.isValid()) return value;
+  return d.format("DD-MMM-YYYY").toLowerCase();
+}
+
 function niceBtn() {
   return {
     borderRadius: 2,
@@ -144,16 +158,23 @@ export default function DashboardPage() {
   const isSuperAdmin = role === "superadmin";
 
   // Filtros con DatePicker (Dayjs)
-  const [desde, setDesde] = React.useState<Dayjs | null>(dayjs().startOf("day"));
-  const [hasta, setHasta] = React.useState<Dayjs | null>(dayjs().endOf("day"));
+  const [desde, setDesde] = React.useState<Dayjs | null>(
+    dayjs().startOf("day")
+  );
+  const [hasta, setHasta] = React.useState<Dayjs | null>(
+    dayjs().endOf("day")
+  );
 
   // SUPERADMIN: dropdown de negocios
   const [negocios, setNegocios] = React.useState<NegocioOption[]>([]);
   const [loadingNegocios, setLoadingNegocios] = React.useState(false);
   const [negocioId, setNegocioId] = React.useState<number | "">("");
 
-  // ====== pestañas SOLO para gráficas
+  // pestañas SOLO para gráficas
   const [chartsTab, setChartsTab] = React.useState<0 | 1>(0);
+
+  // token para aplicar filtros manualmente (solo recarga al dar click en "Filtrar")
+  const [filterToken, setFilterToken] = React.useState(1);
 
   // Datos normales
   const [data, setData] = React.useState<DashboardVentasResponse | null>(null);
@@ -161,7 +182,8 @@ export default function DashboardPage() {
   const [error, setError] = React.useState<string | null>(null);
 
   // Datos personalizadas
-  const [customData, setCustomData] = React.useState<DashboardVentasCustomResponse | null>(null);
+  const [customData, setCustomData] =
+    React.useState<DashboardVentasCustomResponse | null>(null);
   const [loadingCustom, setLoadingCustom] = React.useState(false);
   const [errorCustom, setErrorCustom] = React.useState<string | null>(null);
 
@@ -194,8 +216,8 @@ export default function DashboardPage() {
     folio: number;
     articulo: string;
     descripcion: string;
-    monto: string;     // mantenemos string para facilitar validación
-    cantidad: string;  // idem
+    monto: string; // string para facilitar validación
+    cantidad: string;
   };
 
   const [editForm, setEditForm] = React.useState<EditForm>({
@@ -207,7 +229,8 @@ export default function DashboardPage() {
   });
 
   // Snapshot para poder revertir al cancelar
-  const [editInitialForm, setEditInitialForm] = React.useState<EditForm | null>(null);
+  const [editInitialForm, setEditInitialForm] =
+    React.useState<EditForm | null>(null);
 
   // ===== Toasts =====
   const [toastOpen, setToastOpen] = React.useState(false);
@@ -221,12 +244,14 @@ export default function DashboardPage() {
     setToastOpen(true);
   };
 
+  // ===== Export grid =====
+  const [exportingGrid, setExportingGrid] = React.useState(false);
+
   const openEditModal = (row: VentaRowDto) => {
     const initial: EditForm = {
       folio: Number(row.folio),
       articulo: row.articulo || "",
       descripcion: row.descripcion || "",
-      // mostramos con máximo 2 decimales si vienen en número
       monto: row.monto != null ? Number(row.monto).toFixed(2) : "",
       cantidad: String((row as any).cantidad ?? "1"),
     };
@@ -251,31 +276,24 @@ export default function DashboardPage() {
   const onNumericChange =
     (key: "monto" | "cantidad") =>
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      let v = e.target.value.replace(",", ".");     // coma -> punto
-      // quitar caracteres inválidos
+      let v = e.target.value.replace(",", ".");
       v = v.replace(/[^\d.]/g, "");
-      // permitir solo un punto decimal
       const firstDot = v.indexOf(".");
       if (firstDot !== -1) {
         const head = v.slice(0, firstDot + 1);
         const tail = v.slice(firstDot + 1).replace(/\./g, "");
         v = head + tail;
       }
-      // limitar a 2 decimales
       const m = v.match(/^(\d+)(?:\.(\d{0,2}))?$/);
       if (!v || m) {
         setEditForm((f) => ({ ...f, [key]: v }));
       }
-      // si intenta poner más de 2 decimales, ignoramos el extra
     };
 
   const commitEdit = async () => {
     const idNegocio =
-      typeof negocioId === "number"
-        ? negocioId
-        : getIdNegocioActual() ?? 0;
+      typeof negocioId === "number" ? negocioId : getIdNegocioActual() ?? 0;
 
-    // === Requeridos
     if (!editForm.articulo.trim()) {
       setEditError("El artículo es obligatorio.");
       return;
@@ -289,16 +307,19 @@ export default function DashboardPage() {
       return;
     }
 
-    // Normalización + validación numérica
     const monto = Number(editForm.monto.replace(",", "."));
     const cantidad = Number(editForm.cantidad.replace(",", "."));
 
     if (!(Number.isFinite(monto) && monto > 0)) {
-      setEditError("El monto debe ser un número mayor a 0 y con máximo 2 decimales.");
+      setEditError(
+        "El monto debe ser un número mayor a 0 y con máximo 2 decimales."
+      );
       return;
     }
     if (!(Number.isFinite(cantidad) && cantidad > 0)) {
-      setEditError("La cantidad debe ser un número mayor a 0 y con máximo 2 decimales.");
+      setEditError(
+        "La cantidad debe ser un número mayor a 0 y con máximo 2 decimales."
+      );
       return;
     }
 
@@ -364,72 +385,69 @@ export default function DashboardPage() {
   }, [isSuperAdmin]);
 
   // Cargar dashboard normal (KPIs, charts, grid completo)
-  const loadDashboard = React.useCallback(
-    async (overrideIdNegocio?: number | "") => {
-      setLoading(true);
-      setError(null);
-      try {
-        const selectedIdNegocio =
-          typeof overrideIdNegocio === "number"
-            ? overrideIdNegocio
-            : typeof negocioId === "number"
-            ? negocioId
-            : getIdNegocioActual();
+  const loadDashboard = async (overrideIdNegocio?: number | "") => {
+    setLoading(true);
+    setError(null);
+    try {
+      const selectedIdNegocio =
+        typeof overrideIdNegocio === "number"
+          ? overrideIdNegocio
+          : typeof negocioId === "number"
+          ? negocioId
+          : getIdNegocioActual();
 
-        const req: DashboardVentasRequest = {
-          usuarioNombre,
-          desde: desde ? desde.toDate() : undefined,
-          hasta: hasta ? hasta.toDate() : undefined,
-          page: 1,
-          pageSize: 100,
-          search: debouncedSearch || null,
-          idNegocio: selectedIdNegocio ?? 0,
-        };
+      const req: DashboardVentasRequest = {
+        usuarioNombre,
+        desde: desde ? desde.toDate() : undefined,
+        hasta: hasta ? hasta.toDate() : undefined,
+        page: 1,
+        pageSize: 100,
+        search: debouncedSearch || null,
+        idNegocio: selectedIdNegocio ?? 0,
+      };
 
-        const res: ServiceResponse<DashboardVentasResponse> =
-          await sellService.getVentasDashboard(req);
+      const res: ServiceResponse<DashboardVentasResponse> =
+        await sellService.getVentasDashboard(req);
 
-        if (res.status === 200 && res.data) setData(res.data);
-        else setError(res.message || "Error al obtener las ventas");
-      } catch (err: any) {
-        setError(err.message ?? "Error inesperado al cargar el dashboard");
-      } finally {
-        setLoading(false);
-      }
-    },
-    [usuarioNombre, desde, hasta, debouncedSearch, negocioId]
-  );
+      if (res.status === 200 && res.data) setData(res.data);
+      else setError(res.message || "Error al obtener las ventas");
+    } catch (err: any) {
+      setError(err.message ?? "Error inesperado al cargar el dashboard");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Cargar dashboard de promociones
-  const loadCustomDashboard = React.useCallback(
-    async (overrideIdNegocio?: number | "") => {
-      setLoadingCustom(true);
-      setErrorCustom(null);
-      try {
-        const selectedIdNegocio =
-          typeof overrideIdNegocio === "number"
-            ? overrideIdNegocio
-            : typeof negocioId === "number"
-            ? negocioId
-            : getIdNegocioActual();
+  const loadCustomDashboard = async (overrideIdNegocio?: number | "") => {
+    setLoadingCustom(true);
+    setErrorCustom(null);
+    try {
+      const selectedIdNegocio =
+        typeof overrideIdNegocio === "number"
+          ? overrideIdNegocio
+          : typeof negocioId === "number"
+          ? negocioId
+          : getIdNegocioActual();
 
-        const req: DashboardVentasCustomRequest = {
-          idNegocio: selectedIdNegocio ?? 0,
-          desde: desde ? desde.toDate() : undefined,
-          hasta: hasta ? hasta.toDate() : undefined,
-        };
+      const req: DashboardVentasCustomRequest = {
+        idNegocio: selectedIdNegocio ?? 0,
+        desde: desde ? desde.toDate() : undefined,
+        hasta: hasta ? hasta.toDate() : undefined,
+      };
 
-        const res = await sellService.getVentasCustomDashboard(req);
-        if (res.status === 200 && res.data) setCustomData(res.data);
-        else setErrorCustom(res.message || "Error al obtener las ventas personalizadas");
-      } catch (err: any) {
-        setErrorCustom(err.message ?? "Error inesperado al cargar promociones");
-      } finally {
-        setLoadingCustom(false);
-      }
-    },
-    [desde, hasta, negocioId]
-  );
+      const res = await sellService.getVentasCustomDashboard(req);
+      if (res.status === 200 && res.data) setCustomData(res.data);
+      else
+        setErrorCustom(
+          res.message || "Error al obtener las ventas personalizadas"
+        );
+    } catch (err: any) {
+      setErrorCustom(err.message ?? "Error inesperado al cargar promociones");
+    } finally {
+      setLoadingCustom(false);
+    }
+  };
 
   // Refrescar SOLO las filas del grid, manteniendo KPIs y gráficas
   const refreshGridRowsOnly = React.useCallback(async () => {
@@ -452,35 +470,48 @@ export default function DashboardPage() {
         await sellService.getVentasDashboard(req);
 
       if (res.status === 200 && res.data) {
-        setData((prev) =>
-          prev
-            ? { ...prev, rows: res.data.rows }
-            : res.data
-        );
+        setData((prev) => (prev ? { ...prev, rows: res.data.rows } : res.data));
       }
     } finally {
       setLoadingRows(false);
     }
   }, [usuarioNombre, desde, hasta, debouncedSearch, negocioId]);
 
-  // Cargar al iniciar y cuando cambian filtros
+  // Cargar al iniciar y cuando cambia el "filterToken"
   React.useEffect(() => {
     loadDashboard();
     loadCustomDashboard();
-  }, [loadDashboard, loadCustomDashboard]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterToken]);
 
   // KPIs
   const kpis = React.useMemo(() => {
     if (!data) return [];
     return [
-      { label: "Ventas", value: String(data.totalVentas), icon: <ShoppingCartIcon sx={{ color: "#60a5fa" }} /> },
-      { label: "Cobrado", value: fmtCurrency(data.totalCobrado), icon: <AttachMoneyIcon sx={{ color: "#34d399" }} /> },
-      { label: "Puntos generados", value: data.puntosGenerados.toFixed(2), icon: <PercentIcon sx={{ color: "#a78bfa" }} /> },
-      { label: "Ticket promedio", value: fmtCurrency(data.ticketPromedio), icon: <TrendingUpIcon sx={{ color: "#f59e0b" }} /> },
+      {
+        label: "Ventas",
+        value: String(data.totalVentas),
+        icon: <ShoppingCartIcon sx={{ color: "#60a5fa" }} />,
+      },
+      {
+        label: "Cobrado",
+        value: fmtCurrency(data.totalCobrado),
+        icon: <AttachMoneyIcon sx={{ color: "#34d399" }} />,
+      },
+      {
+        label: "Puntos generados",
+        value: data.puntosGenerados.toFixed(2),
+        icon: <PercentIcon sx={{ color: "#a78bfa" }} />,
+      },
+      {
+        label: "Ticket promedio",
+        value: fmtCurrency(data.ticketPromedio),
+        icon: <TrendingUpIcon sx={{ color: "#f59e0b" }} />,
+      },
     ];
   }, [data]);
 
-  // Columnas del grid (se agrega la de Editar al inicio)
+  // Columnas del grid (se agrega la de Editar al final)
   const columns: GridColDef<VentaRowDto>[] = [
     { field: "folio", headerName: "Folio", width: 80 },
     { field: "articulo", headerName: "Artículo", width: 140 },
@@ -510,7 +541,12 @@ export default function DashboardPage() {
       headerAlign: "center",
       valueFormatter: (p) => fmtCurrency(p as number),
     },
-    { field: "creadoFecha", headerName: "Fecha", width: 160, valueFormatter: (p) => fmtDate(p as string) },
+    {
+      field: "creadoFecha",
+      headerName: "Fecha",
+      width: 160,
+      valueFormatter: (p) => fmtDate(p as string),
+    },
     {
       field: "esCustom",
       headerName: "Personalizado",
@@ -536,7 +572,10 @@ export default function DashboardPage() {
       renderCell: (p) => {
         const custom = isCustom(p.row.esCustom);
         return (
-          <MuiTooltip title={custom ? "No editable (personalizado)" : "Editar venta"} arrow>
+          <MuiTooltip
+            title={custom ? "No editable (personalizado)" : "Editar venta"}
+            arrow
+          >
             <span>
               <IconButton
                 size="small"
@@ -556,39 +595,73 @@ export default function DashboardPage() {
 
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
+  // ==== Helper: limitar a máx. 7 días hacia atrás desde "hasta" ====
+const withinLast7Days = (iso: string) => {
+  const d = dayjs(iso);
+  if (!d.isValid()) return false;
+
+  const end = (hasta ?? dayjs()).endOf("day");       // fecha Hasta (fin del día)
+  const start = end.clone().startOf("day").subtract(6, "day"); // 7 días hacia atrás
+
+  const time = d.valueOf();
+  return time >= start.valueOf() && time <= end.valueOf();
+};
+
   // Series normales (ventas por día -> BARRAS)
-  const ventasPorDia =
-    data?.ventasPorDia?.map((x, i) => ({
+  const ventasPorDia = React.useMemo(() => {
+    const raw = data?.ventasPorDia ?? [];
+    const filtered =
+      raw.length === 0
+        ? []
+        : raw.filter((x) => withinLast7Days(String(x.dia)));
+
+    return filtered.map((x, i) => ({
       dia: x.dia,
       ventas: x.ventas,
       color: SOFT_COLORS[i % SOFT_COLORS.length],
-    })) ?? [];
+    }));
+  }, [data, hasta]);
 
-  // Top artículos
+  // Top artículos (Top 10)
   const topArticulos = React.useMemo(() => {
     if (!data) return [];
-    if (data.topArticulos?.length && (data.topArticulos as any)[0]?.unidades !== undefined) {
-      return data.topArticulos.map((x, i) => ({
-        name: x.nombre,
-        qty: Number((x as any).unidades),
-        color: SOFT_COLORS[i % SOFT_COLORS.length],
-      }));
+    if (
+      data.topArticulos?.length &&
+      (data.topArticulos as any)[0]?.unidades !== undefined
+    ) {
+      return data.topArticulos
+        .map((x, i) => ({
+          name: x.nombre,
+          qty: Number((x as any).unidades),
+          color: SOFT_COLORS[i % SOFT_COLORS.length],
+        }))
+        .sort((a, b) => b.qty - a.qty)
+        .slice(0, 10);
     }
+
     const acc = new Map<string, number>();
     for (const r of data.rows) {
       const name = r.articulo || "(Sin nombre)";
       const q = Number((r as any).cantidad ?? 1);
       acc.set(name, (acc.get(name) ?? 0) + q);
     }
+
     return Array.from(acc.entries())
-      .map(([name, qty], i) => ({ name, qty, color: SOFT_COLORS[i % SOFT_COLORS.length] }))
+      .map(([name, qty], i) => ({
+        name,
+        qty,
+        color: SOFT_COLORS[i % SOFT_COLORS.length],
+      }))
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 10);
   }, [data]);
 
   /* ================== EXPORT HELPERS ================== */
   // Excel (genérico)
-  const exportSheet = (sheets: { name: string; rows: any[] }[], fileName: string) => {
+  const exportSheet = (
+    sheets: { name: string; rows: any[] }[],
+    fileName: string
+  ) => {
     const wb = XLSX.utils.book_new();
     sheets.forEach((s) => {
       const ws = XLSX.utils.json_to_sheet(s.rows);
@@ -599,7 +672,10 @@ export default function DashboardPage() {
 
   // Excel: Ventas por día
   const onExportVentasDiaXlsx = () => {
-    const rows = ventasPorDia.map((r) => ({ Dia: r.dia, Ventas: r.ventas }));
+    const rows = ventasPorDia.map((r) => ({
+      Día: fmtDateAxis(String(r.dia)),
+      Ventas: r.ventas,
+    }));
     exportSheet(
       [{ name: "Ventas_por_dia", rows }],
       `ventas_por_dia_${new Date().toISOString().slice(0, 10)}.xlsx`
@@ -608,17 +684,84 @@ export default function DashboardPage() {
 
   // Excel: Top artículos
   const onExportTopArtXlsx = () => {
-    const rows = topArticulos.map((r) => ({ Articulo: r.name, Cantidad: r.qty }));
+    const rows = topArticulos.map((r) => ({
+      Artículo: r.name,
+      Cantidad: r.qty,
+    }));
     exportSheet(
       [{ name: "Top_articulos", rows }],
       `top_articulos_${new Date().toISOString().slice(0, 10)}.xlsx`
     );
   };
 
+  // Excel: Grid de ventas filtrado
+  const onExportGridXlsx = async () => {
+    try {
+      if (!data?.rows?.length) {
+        showToast("No hay datos para exportar.", "error");
+        return;
+      }
+      setExportingGrid(true);
+
+      const rows = data.rows.map((r) => ({
+        Folio: r.folio,
+        Artículo: r.articulo,
+        Descripción: r.descripcion,
+        Teléfono: (r as any).telefonoCliente ?? "",
+        Monto: r.monto,
+        Puntos: r.puntosGenerados,
+        Cobrado: r.cobrado,
+        Fecha: fmtDate(r.creadoFecha as any),
+        Personalizado: isCustom((r as any).esCustom) ? "Sí" : "No",
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Ventas");
+
+      // Estilos simples (encabezado + zebra) – se castea a any
+      const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+      for (let R = range.s.r; R <= range.e.r; ++R) {
+        for (let C = range.s.c; C <= range.e.c; ++C) {
+          const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+          const cell = (ws as any)[cellAddress];
+          if (!cell) continue;
+          if (R === range.s.r) {
+            // header
+            cell.s = {
+              font: { bold: true, color: { rgb: "FFFFFFFF" } },
+              fill: { fgColor: { rgb: "2563EB" }, patternType: "solid" },
+              alignment: { horizontal: "center" },
+            };
+          } else if (R % 2 === 0) {
+            // zebra
+            cell.s = {
+              fill: { fgColor: { rgb: "F1F5F9" }, patternType: "solid" },
+            };
+          }
+        }
+      }
+
+      XLSX.writeFile(
+        wb,
+        `ventas_filtradas_${new Date().toISOString().slice(0, 10)}.xlsx`
+      );
+      showToast("Descarga completada con éxito.", "success");
+    } catch (err) {
+      console.error(err);
+      showToast("Ocurrió un error al exportar.", "error");
+    } finally {
+      setExportingGrid(false);
+    }
+  };
+
   // PNG (genérico)
   const savePng = async (ref: React.RefObject<HTMLElement>, name: string) => {
     if (!ref.current) return;
-    const dataUrl = await htmlToImage.toPng(ref.current, { pixelRatio: 2, backgroundColor: "#ffffff" });
+    const dataUrl = await htmlToImage.toPng(ref.current, {
+      pixelRatio: 2,
+      backgroundColor: "#ffffff",
+    });
     const link = document.createElement("a");
     link.download = name.endsWith(".png") ? name : `${name}.png`;
     link.href = dataUrl;
@@ -642,30 +785,88 @@ export default function DashboardPage() {
     URL.revokeObjectURL(url);
   };
 
-  // ===== Promociones
-  const promoCombinedData = React.useMemo(() => {
-    if (!customData?.series?.length) return [];
-    const allDates = new Set<string>();
-    customData.series.forEach((s) => s.data.forEach((p) => allDates.add(String(p.fecha))));
-    const datesSorted = Array.from(allDates).sort();
-    return datesSorted.map((fecha) => {
-      const row: any = { fecha };
-      customData.series.forEach((s) => {
-        const point = s.data.find((p) => String(p.fecha) === fecha);
-        row[s.nombreProducto] = point?.ventas ?? 0;
-      });
-      return row;
-    });
-  }, [customData]);
+  // ===== Promociones: combinada por día (máx. 7 días, top 10 promos) =====
+  const { promoCombinedData, promoTopSeries, promoProductNames } =
+    React.useMemo(() => {
+      const result = {
+        promoCombinedData: [] as any[],
+        promoTopSeries: [] as { name: string; qty: number; color: string }[],
+        promoProductNames: [] as string[],
+      };
 
-  const productNames = (customData?.series ?? []).map((s) => s.nombreProducto);
+      if (!customData?.series?.length) return result;
+
+      // Filtrar puntos por última semana
+      const filteredSeries = customData.series.map((s) => ({
+        ...s,
+        data: s.data.filter((p) => withinLast7Days(String(p.fecha))),
+      }));
+
+      // Totales por promoción
+      const totals = new Map<string, number>();
+      filteredSeries.forEach((s) => {
+        const total = s.data.reduce((acc, p) => acc + p.ventas, 0);
+        totals.set(s.nombreProducto, (totals.get(s.nombreProducto) ?? 0) + total);
+      });
+
+      const ranking = Array.from(totals.entries())
+        .map(([name, qty]) => ({ name, qty }))
+        .sort((a, b) => {
+          if (b.qty !== a.qty) return b.qty - a.qty;
+          return a.name.localeCompare(b.name, "es");
+        });
+
+      const top10 = ranking.slice(0, 10);
+      const topNames = top10.map((x) => x.name);
+
+      // Fechas únicas
+      const allDates = new Set<string>();
+      filteredSeries.forEach((s) =>
+        s.data.forEach((p) => {
+          if (topNames.includes(s.nombreProducto)) {
+            allDates.add(String(p.fecha));
+          }
+        })
+      );
+      const datesSorted = Array.from(allDates).sort();
+
+      const combinedRows = datesSorted.map((fecha) => {
+        const row: any = { fecha };
+        filteredSeries.forEach((s) => {
+          if (!topNames.includes(s.nombreProducto)) return;
+          const point = s.data.find((p) => String(p.fecha) === fecha);
+          row[s.nombreProducto] = point?.ventas ?? 0;
+        });
+        return row;
+      });
+
+      const topSeriesChart = top10.map((t, i) => ({
+        name: t.name,
+        qty: t.qty,
+        color: SOFT_COLORS[i % SOFT_COLORS.length],
+      }));
+
+      result.promoCombinedData = combinedRows;
+      result.promoTopSeries = topSeriesChart;
+      result.promoProductNames = top10.map((x) => x.name);
+
+      return result;
+    }, [customData, hasta]);
 
   const onExportPromosXlsx = () => {
     if (!customData?.series?.length) return;
-    const combined = promoCombinedData.map((r) => ({ ...r }));
+    const combined = promoCombinedData.map((r) => ({
+      Fecha: fmtDateAxis(String(r.fecha)),
+      ...r,
+    }));
     const perSeries = customData.series.map((s) => ({
       name: s.nombreProducto.slice(0, 31),
-      rows: s.data.map((p) => ({ Fecha: p.fecha, Ventas: p.ventas, Monto: p.monto, Canjes: p.canjes })),
+      rows: s.data.map((p) => ({
+        Fecha: fmtDateAxis(String(p.fecha)),
+        Ventas: p.ventas,
+        Monto: p.monto,
+        Canjes: p.canjes,
+      })),
     }));
     exportSheet(
       [{ name: "Promociones_por_dia", rows: combined }, ...perSeries],
@@ -687,16 +888,18 @@ export default function DashboardPage() {
             </Typography>
           </div>
           <Stack direction="row" spacing={1}>
-            <MuiTooltip title="Refrescar" arrow>
+            <MuiTooltip title="Refrescar (manteniendo filtros)" arrow>
               <IconButton
                 size="small"
                 onClick={() => {
-                  // Refresca KPIs, gráficas y grid
-                  loadDashboard();
-                  loadCustomDashboard();
+                  setFilterToken((x) => x + 1);
                 }}
                 aria-label="Refrescar"
-                sx={{ ml: 1, color: "primary.main", "&:hover": { color: "primary.dark" } }}
+                sx={{
+                  ml: 1,
+                  color: "primary.main",
+                  "&:hover": { color: "primary.dark" },
+                }}
               >
                 <RefreshIcon />
               </IconButton>
@@ -706,7 +909,11 @@ export default function DashboardPage() {
 
         {/* Filtros */}
         <Paper sx={{ p: 2.5, borderRadius: 3 }}>
-          <Stack direction={{ xs: "column", lg: "row" }} spacing={2} alignItems={{ xs: "stretch", lg: "center" }}>
+          <Stack
+            direction={{ xs: "column", lg: "row" }}
+            spacing={2}
+            alignItems={{ xs: "stretch", lg: "center" }}
+          >
             {isSuperAdmin && (
               <Autocomplete
                 options={negocios}
@@ -716,14 +923,15 @@ export default function DashboardPage() {
                 onChange={(_, newVal) => {
                   const nextId = newVal ? newVal.id : "";
                   setNegocioId(nextId);
-                  loadDashboard(nextId);
-                  loadCustomDashboard(nextId);
                 }}
                 loading={loadingNegocios}
                 clearOnEscape
                 autoHighlight
                 includeInputInList
-                sx={{ minWidth: { sm: 320 }, "& .MuiOutlinedInput-root": { borderRadius: 2 } }}
+                sx={{
+                  minWidth: { sm: 320 },
+                  "& .MuiOutlinedInput-root": { borderRadius: 2 },
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
@@ -734,7 +942,13 @@ export default function DashboardPage() {
                       ...params.InputProps,
                       endAdornment: (
                         <>
-                          {loadingNegocios ? <CircularProgress color="inherit" size={18} sx={{ mr: 1 }} /> : null}
+                          {loadingNegocios ? (
+                            <CircularProgress
+                              color="inherit"
+                              size={18}
+                              sx={{ mr: 1 }}
+                            />
+                          ) : null}
                           {params.InputProps.endAdornment}
                         </>
                       ),
@@ -748,26 +962,42 @@ export default function DashboardPage() {
               label="Desde"
               value={desde}
               onChange={(v) => setDesde(v)}
-              slotProps={{ textField: { fullWidth: true, sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } } } }}
+              format="DD-MMM-YYYY"
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
+                },
+              }}
             />
             <DatePicker
               label="Hasta"
               value={hasta}
               onChange={(v) => setHasta(v)}
-              slotProps={{ textField: { fullWidth: true, sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } } } }}
+              format="DD-MMM-YYYY"
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
+                },
+              }}
             />
 
             <Stack direction="row" spacing={1}>
               <Button
                 variant="contained"
                 onClick={() => {
-                  loadDashboard();
-                  loadCustomDashboard();
+                  // solo cuando se da click se recarga todo
+                  setFilterToken((x) => x + 1);
                 }}
                 disabled={loading || loadingCustom}
                 sx={{ borderRadius: 2, px: 3 }}
               >
-                {loading || loadingCustom ? <CircularProgress size={20} /> : "Filtrar"}
+                {loading || loadingCustom ? (
+                  <CircularProgress size={20} />
+                ) : (
+                  "Filtrar"
+                )}
               </Button>
               <Button
                 variant="outlined"
@@ -775,8 +1005,7 @@ export default function DashboardPage() {
                   const d = dayjs();
                   setDesde(d.startOf("day"));
                   setHasta(d.endOf("day"));
-                  loadDashboard();
-                  loadCustomDashboard();
+                  setFilterToken((x) => x + 1);
                 }}
                 sx={{ borderRadius: 2 }}
               >
@@ -791,7 +1020,11 @@ export default function DashboardPage() {
           <Stack direction={{ xs: "column", md: "row" }} gap={2}>
             {kpis.map((k, i) => (
               <Paper key={i} sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="space-between"
+                >
                   <Typography color="text.secondary">{k.label}</Typography>
                   {k.icon}
                 </Stack>
@@ -822,13 +1055,17 @@ export default function DashboardPage() {
               <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
                 {/* Ventas por día */}
                 <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
                     <div>
                       <Typography fontWeight={800} color="primary">
                         Ventas por día
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Últimos resultados por fecha
+                        Últimos resultados por fecha (máx. 7 días)
                       </Typography>
                     </div>
                     <Stack direction="row" spacing={1}>
@@ -868,14 +1105,26 @@ export default function DashboardPage() {
                     </Stack>
                   </Stack>
 
-                  <Box ref={ventasDiaRef} sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}>
+                  <Box
+                    ref={ventasDiaRef}
+                    sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}
+                  >
                     <Box sx={{ height: 260 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={ventasPorDia} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                        <BarChart
+                          data={ventasPorDia}
+                          margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+                        >
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="dia" />
+                          <XAxis
+                            dataKey="dia"
+                            tickFormatter={fmtDateAxis}
+                            tick={{ fontSize: 11 }}
+                          />
                           <YAxis />
-                          <Tooltip />
+                          <Tooltip
+                            labelFormatter={(v) => fmtDateAxis(String(v))}
+                          />
                           <Bar dataKey="ventas" radius={[6, 6, 0, 0]}>
                             {ventasPorDia.map((row, i) => (
                               <Cell key={i} fill={row.color} />
@@ -889,13 +1138,17 @@ export default function DashboardPage() {
 
                 {/* Top artículos */}
                 <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
                     <div>
                       <Typography fontWeight={800} color="primary">
                         Artículos más vendidos
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Top por cantidad
+                        Top 10 por cantidad
                       </Typography>
                     </div>
                     <Stack direction="row" spacing={1}>
@@ -935,14 +1188,22 @@ export default function DashboardPage() {
                     </Stack>
                   </Stack>
 
-                  <Box ref={topArtRef} sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}>
+                  <Box
+                    ref={topArtRef}
+                    sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}
+                  >
                     <Box sx={{ height: 260 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={topArticulos} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
+                        <BarChart
+                          data={topArticulos}
+                          margin={{ top: 8, right: 16, left: -10, bottom: 0 }}
+                        >
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                           <YAxis />
-                          <Tooltip formatter={(v: any) => [Number(v).toFixed(2)]} />
+                          <Tooltip
+                            formatter={(v: any) => [Number(v).toFixed(2)]}
+                          />
                           <Bar dataKey="qty" radius={[6, 6, 0, 0]}>
                             {topArticulos.map((entry, i) => (
                               <Cell key={i} fill={entry.color} />
@@ -956,103 +1217,167 @@ export default function DashboardPage() {
               </Stack>
             ) : (
               // TAB: Ventas Promociones
-              <Paper sx={{ p: 2.5, borderRadius: 3 }}>
-                <Stack direction="row" alignItems="center" justifyContent="space-between">
-                  <div>
-                    <Typography fontWeight={800} color="primary">
-                      Ventas de promociones personalizadas
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Cada color representa una promoción personalizada
-                    </Typography>
-                  </div>
-                  <Stack direction="row" spacing={1}>
-                    <MuiTooltip title="Excel (datos de las series)" arrow>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={<DownloadIcon />}
-                        onClick={() => {
-                          if (!customData?.series?.length) return;
-                          const combined = promoCombinedData.map((r) => ({ ...r }));
-                          const perSeries = customData.series.map((s) => ({
-                            name: s.nombreProducto.slice(0, 31),
-                            rows: s.data.map((p) => ({
-                              Fecha: p.fecha,
-                              Ventas: p.ventas,
-                              Monto: p.monto,
-                              Canjes: p.canjes,
-                            })),
-                          }));
-                          const wb = XLSX.utils.book_new();
-                          const add = (name: string, rows: any[]) => {
-                            const ws = XLSX.utils.json_to_sheet(rows);
-                            XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
-                          };
-                          add("Promociones_por_dia", combined);
-                          perSeries.forEach((s) => add(s.name, s.rows));
-                          XLSX.writeFile(wb, `promos_custom_${new Date().toISOString().slice(0, 10)}.xlsx`);
-                        }}
-                        sx={niceBtn()}
+              <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
+                {/* Ventas de promociones por día */}
+                <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
+                    <div>
+                      <Typography fontWeight={800} color="primary">
+                        Ventas de promociones personalizadas
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Cada color representa una promoción personalizada
+                        (máx. 7 días, Top 10)
+                      </Typography>
+                    </div>
+                    <Stack direction="row" spacing={1}>
+                      <MuiTooltip
+                        title="Excel (datos de las promociones)"
+                        arrow
                       >
-                        Excel
-                      </Button>
-                    </MuiTooltip>
-                    <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={<ImageIcon />}
-                        onClick={() => savePng(promoChartRef, "promos_por_dia")}
-                        sx={niceBtn()}
-                      >
-                        PNG
-                      </Button>
-                    </MuiTooltip>
-                    <MuiTooltip title="SVG (vector editable)" arrow>
-                      <Button
-                        variant="outlined"
-                        size="small"
-                        startIcon={<PolylineIcon />}
-                        onClick={() => saveSvg(promoChartRef, "promos_por_dia")}
-                        sx={niceBtn()}
-                      >
-                        SVG
-                      </Button>
-                    </MuiTooltip>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<DownloadIcon />}
+                          onClick={onExportPromosXlsx}
+                          sx={niceBtn()}
+                        >
+                          Excel
+                        </Button>
+                      </MuiTooltip>
+                      <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<ImageIcon />}
+                          onClick={() => savePng(promoChartRef, "promos_por_dia")}
+                          sx={niceBtn()}
+                        >
+                          PNG
+                        </Button>
+                      </MuiTooltip>
+                      <MuiTooltip title="SVG (vector editable)" arrow>
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<PolylineIcon />}
+                          onClick={() => saveSvg(promoChartRef, "promos_por_dia")}
+                          sx={niceBtn()}
+                        >
+                          SVG
+                        </Button>
+                      </MuiTooltip>
+                    </Stack>
                   </Stack>
-                </Stack>
 
-                <Box ref={promoChartRef} sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}>
-                  {errorCustom && <Typography color="error" mb={1}>{errorCustom}</Typography>}
-                  {loadingCustom ? (
-                    <Box display="flex" justifyContent="center" py={6}>
-                      <CircularProgress />
-                    </Box>
-                  ) : (
-                    <Box sx={{ height: 340 }}>
+                  <Box
+                    ref={promoChartRef}
+                    sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}
+                  >
+                    {errorCustom && (
+                      <Typography color="error" mb={1}>
+                        {errorCustom}
+                      </Typography>
+                    )}
+                    {loadingCustom ? (
+                      <Box display="flex" justifyContent="center" py={6}>
+                        <CircularProgress />
+                      </Box>
+                    ) : (
+                      <Box sx={{ height: 260 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={promoCombinedData}
+                            margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis
+                              dataKey="fecha"
+                              tickFormatter={(v) => fmtDateAxis(String(v))}
+                              tick={{ fontSize: 11 }}
+                            />
+                            <YAxis />
+                            <Tooltip
+                              labelFormatter={(v) =>
+                                fmtDateAxis(String(v))
+                              }
+                            />
+                            <Legend />
+                            {promoProductNames.map((name, i) => (
+                              <Bar
+                                key={name}
+                                dataKey={name}
+                                stackId="ventas"
+                                radius={[6, 6, 0, 0]}
+                                fill={SOFT_COLORS[i % SOFT_COLORS.length]}
+                              />
+                            ))}
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </Box>
+                    )}
+                  </Box>
+                </Paper>
+
+                {/* Top promociones */}
+                <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
+                  <Stack
+                    direction="row"
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
+                    <div>
+                      <Typography fontWeight={800} color="primary">
+                        Top promociones personalizadas
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Top 10 por cantidad vendida
+                      </Typography>
+                    </div>
+                    <Stack direction="row" spacing={1}>
+                      <MuiTooltip
+                        title="Excel (Top promociones personalizadas)"
+                        arrow
+                      >
+                        <Button
+                          variant="outlined"
+                          size="small"
+                          startIcon={<DownloadIcon />}
+                          onClick={onExportPromosXlsx}
+                          sx={niceBtn()}
+                        >
+                          Excel
+                        </Button>
+                      </MuiTooltip>
+                    </Stack>
+                  </Stack>
+
+                  <Box sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}>
+                    <Box sx={{ height: 260 }}>
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={promoCombinedData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                        <BarChart
+                          data={promoTopSeries}
+                          margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
+                        >
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="fecha" />
+                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                           <YAxis />
                           <Tooltip />
-                          <Legend />
-                          {productNames.map((name, i) => (
-                            <Bar
-                              key={name}
-                              dataKey={name}
-                              stackId="ventas"
-                              radius={[6, 6, 0, 0]}
-                              fill={SOFT_COLORS[i % SOFT_COLORS.length]}
-                            />
-                          ))}
+                          <Bar dataKey="qty" radius={[6, 6, 0, 0]}>
+                            {promoTopSeries.map((entry, i) => (
+                              <Cell key={i} fill={entry.color} />
+                            ))}
+                          </Bar>
                         </BarChart>
                       </ResponsiveContainer>
                     </Box>
-                  )}
-                </Box>
-              </Paper>
+                  </Box>
+                </Paper>
+              </Stack>
             )}
           </Box>
         </Paper>
@@ -1070,7 +1395,12 @@ export default function DashboardPage() {
               Ventas recientes
             </Typography>
 
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%", maxWidth: 560 }}>
+            <Stack
+              direction="row"
+              spacing={1}
+              alignItems="center"
+              sx={{ width: "100%", maxWidth: 650 }}
+            >
               <TextField
                 value={search}
                 onChange={(e) => {
@@ -1081,15 +1411,43 @@ export default function DashboardPage() {
                 size="small"
                 fullWidth
                 InputProps={{
-                  startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: "text.disabled" }} />,
+                  startAdornment: (
+                    <SearchIcon
+                      fontSize="small"
+                      sx={{ mr: 1, color: "text.disabled" }}
+                    />
+                  ),
                   sx: { borderRadius: 20, height: 44 },
                 }}
               />
+              <MuiTooltip title="Exportar a Excel (según filtros)" arrow>
+                <span>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={
+                      exportingGrid ? (
+                        <CircularProgress size={14} />
+                      ) : (
+                        <DownloadIcon />
+                      )
+                    }
+                    disabled={exportingGrid || !data?.rows?.length}
+                    onClick={onExportGridXlsx}
+                    sx={niceBtn()}
+                  >
+                    Excel
+                  </Button>
+                </span>
+              </MuiTooltip>
               <MuiTooltip title="Refrescar tabla" arrow>
                 <IconButton
                   size="small"
                   onClick={refreshGridRowsOnly}
-                  sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}
+                  sx={{
+                    color: "primary.main",
+                    "&:hover": { color: "primary.dark" },
+                  }}
                 >
                   <RefreshIcon />
                 </IconButton>
@@ -1099,9 +1457,13 @@ export default function DashboardPage() {
 
           <Divider sx={{ mb: 2 }} />
 
-          {error && <Typography color="error" mb={2}>{error}</Typography>}
+          {error && (
+            <Typography color="error" mb={2}>
+              {error}
+            </Typography>
+          )}
 
-          {(loading && !data) ? (
+          {loading && !data ? (
             <Box display="flex" justifyContent="center" py={6}>
               <CircularProgress />
             </Box>
@@ -1118,11 +1480,21 @@ export default function DashboardPage() {
                 loading={loadingRows || (loading && !!data)}
                 sx={{
                   borderRadius: 3,
-                  "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
-                  "& .MuiDataGrid-row:nth-of-type(even)": { backgroundColor: "#ffffff" },
-                  "& .MuiDataGrid-row:nth-of-type(odd)": { backgroundColor: "rgba(14,165,233,0.06)" },
-                  "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.12) !important" },
-                  "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
+                  "& .MuiDataGrid-columnHeaders": {
+                    backgroundColor: "action.hover",
+                    fontWeight: 700,
+                  },
+                  "& .MuiDataGrid-row:nth-of-type(even)": {
+                    backgroundColor: "#ffffff",
+                  },
+                  "& .MuiDataGrid-row:nth-of-type(odd)": {
+                    backgroundColor: "rgba(14,165,233,0.06)",
+                  },
+                  "& .MuiDataGrid-row:hover": {
+                    backgroundColor: "rgba(14,165,233,0.12) !important",
+                  },
+                  "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within":
+                    { outline: "none" },
                 }}
               />
             </Box>
@@ -1136,13 +1508,12 @@ export default function DashboardPage() {
           Editar venta
         </DialogTitle>
         <DialogContent dividers>
-          <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mt: 1 }}>
-            <TextField
-              label="Folio"
-              fullWidth
-              value={editForm.folio}
-              disabled
-            />
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            gap={2}
+            sx={{ mt: 1 }}
+          >
+            <TextField label="Folio" fullWidth value={editForm.folio} disabled />
             <TextField
               label="Artículo "
               fullWidth
@@ -1160,7 +1531,11 @@ export default function DashboardPage() {
             onChange={onEditChange("descripcion")}
           />
 
-          <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mt: 2 }}>
+          <Stack
+            direction={{ xs: "column", md: "row" }}
+            gap={2}
+            sx={{ mt: 2 }}
+          >
             <TextField
               label="Monto "
               fullWidth
@@ -1188,9 +1563,13 @@ export default function DashboardPage() {
               {editError}
             </Typography>
           )}
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
-            Solo se modificarán Artículo, Descripción, Monto y Cantidad. Los puntos y el
-            total cobrado se recalculan automáticamente.
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ mt: 1, display: "block" }}
+          >
+            Solo se modificarán Artículo, Descripción, Monto y Cantidad. Los
+            puntos y el total cobrado se recalculan automáticamente.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
@@ -1207,7 +1586,9 @@ export default function DashboardPage() {
             variant="contained"
             onClick={commitEdit}
             disabled={editSaving}
-            startIcon={editSaving ? <CircularProgress size={16} /> : undefined}
+            startIcon={
+              editSaving ? <CircularProgress size={16} /> : undefined
+            }
           >
             {editSaving ? "Guardando…" : "Guardar cambios"}
           </Button>

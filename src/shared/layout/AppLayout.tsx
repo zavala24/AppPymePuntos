@@ -63,10 +63,9 @@ function useDisplayName(token?: string | null) {
 
 function initials(text: string) {
   const t = (text || "").trim();
-  if (!t) return "US";
+  if (!t) return "U";
   const first = t[0] ?? "";
-  const second = t[1] ?? "";
-  return (first + second).toUpperCase();
+  return (first).toUpperCase();
 }
 
 export default function AppLayout() {
