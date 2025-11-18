@@ -12,4 +12,5 @@ export interface IProductosCustomRepository {
   // Android:
   acumularProgresoCustom(req: ProgresoCustomRequest): Promise<ServiceResponse<ProgresoClienteCustomDto>>;
   canjearProgresoCustom(req: ProgresoCustomRequest): Promise<ServiceResponse<ProgresoClienteCustomDto>>;
+  deleteProductoCustom(idProductoCustom: number): Promise<ServiceResponse<boolean>>;
 }

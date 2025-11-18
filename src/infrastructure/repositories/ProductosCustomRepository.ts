@@ -45,4 +45,12 @@ export class ProductosCustomRepository implements IProductosCustomRepository {
     );
     return data;
   }
+
+  async deleteProductoCustom(idProductoCustom: number): Promise<ServiceResponse<boolean>> {
+    const { data } = await api.delete<ServiceResponse<boolean>>(
+      `${this.base}/DeleteProductoCustom`,
+      { params: { idProductoCustom } }
+    );
+    return data;
+  }
 }

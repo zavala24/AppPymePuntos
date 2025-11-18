@@ -107,13 +107,16 @@ function fmtCurrency(n: number) {
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 }
 
-// Para la columna de fecha del grid
+// Para la columna de fecha del grid (fecha + hora:minuto)
 function fmtDate(iso: string) {
   const d = new Date(iso);
-  return d.toLocaleDateString("es-MX", {
+  return d.toLocaleString("es-MX", {
     day: "2-digit",
     month: "short",
     year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   });
 }
 
@@ -544,13 +547,13 @@ export default function DashboardPage() {
     {
       field: "creadoFecha",
       headerName: "Fecha",
-      width: 160,
+      width: 150,
       valueFormatter: (p) => fmtDate(p as string),
     },
     {
       field: "esCustom",
-      headerName: "Personalizado",
-      width: 130,
+      headerName: "Especial",
+      width: 100,
       align: "center",
       headerAlign: "center",
       sortable: true,
@@ -596,16 +599,16 @@ export default function DashboardPage() {
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
   // ==== Helper: limitar a máx. 7 días hacia atrás desde "hasta" ====
-const withinLast7Days = (iso: string) => {
-  const d = dayjs(iso);
-  if (!d.isValid()) return false;
+  const withinLast7Days = (iso: string) => {
+    const d = dayjs(iso);
+    if (!d.isValid()) return false;
 
-  const end = (hasta ?? dayjs()).endOf("day");       // fecha Hasta (fin del día)
-  const start = end.clone().startOf("day").subtract(6, "day"); // 7 días hacia atrás
+    const end = (hasta ?? dayjs()).endOf("day"); // fecha Hasta (fin del día)
+    const start = end.clone().startOf("day").subtract(6, "day"); // 7 días hacia atrás
 
-  const time = d.valueOf();
-  return time >= start.valueOf() && time <= end.valueOf();
-};
+    const time = d.valueOf();
+    return time >= start.valueOf() && time <= end.valueOf();
+  };
 
   // Series normales (ventas por día -> BARRAS)
   const ventasPorDia = React.useMemo(() => {
@@ -1384,33 +1387,36 @@ const withinLast7Days = (iso: string) => {
 
         {/* ========= Tabla ========= */}
         <Paper sx={{ p: 2.5, borderRadius: 3 }}>
+          {/* Título como en "Promociones del negocio" */}
+          <Typography
+            variant="h6"
+            fontWeight={800}
+            color="primary"
+            sx={{ mb: 1 }}
+          >
+            Ventas recientes
+          </Typography>
+
+          <Divider sx={{ mb: 2 }} />
+
+          {/* Buscador + acciones debajo de la línea */}
           <Stack
             direction={{ xs: "column", md: "row" }}
-            alignItems={{ xs: "stretch", md: "center" }}
-            justifyContent="space-between"
-            sx={{ mb: 1 }}
             spacing={2}
+            alignItems={{ xs: "stretch", md: "center" }}
+            sx={{ mb: 2, maxWidth: 900 }}
           >
-            <Typography variant="h6" fontWeight={800} color="primary">
-              Ventas recientes
-            </Typography>
-
-            <Stack
-              direction="row"
-              spacing={1}
-              alignItems="center"
-              sx={{ width: "100%", maxWidth: 650 }}
-            >
-              <TextField
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPaginationModel((m) => ({ ...m, page: 0 }));
-                }}
-                placeholder="Buscar por folio, artículo, descripción, monto, puntos o cobrado…"
-                size="small"
-                fullWidth
-                InputProps={{
+            <TextField
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPaginationModel((m) => ({ ...m, page: 0 }));
+              }}
+              placeholder="Buscar por folio, artículo, descripción, monto, puntos o cobrado…"
+              size="small"
+              fullWidth
+              InputProps={
+                {
                   startAdornment: (
                     <SearchIcon
                       fontSize="small"
@@ -1418,8 +1424,11 @@ const withinLast7Days = (iso: string) => {
                     />
                   ),
                   sx: { borderRadius: 20, height: 44 },
-                }}
-              />
+                } as any
+              }
+            />
+
+            <Stack direction="row" spacing={1} alignItems="center">
               <MuiTooltip title="Exportar a Excel (según filtros)" arrow>
                 <span>
                   <Button
@@ -1454,8 +1463,6 @@ const withinLast7Days = (iso: string) => {
               </MuiTooltip>
             </Stack>
           </Stack>
-
-          <Divider sx={{ mb: 2 }} />
 
           {error && (
             <Typography color="error" mb={2}>

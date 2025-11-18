@@ -28,4 +28,8 @@ export class ProductosCustomService implements IProductosCustomService {
   canjearProgresoCustom(req: ProgresoCustomRequest): Promise<ServiceResponse<ProgresoClienteCustomDto>> {
     return this.repo.canjearProgresoCustom(req);
   }
+
+    deleteProductoCustom(idProductoCustom: number): Promise<ServiceResponse<boolean>> {
+    return this.repo.deleteProductoCustom(idProductoCustom);
+  }
 }

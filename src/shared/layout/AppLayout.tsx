@@ -1,4 +1,3 @@
-// src/shared/layout/AppLayout.tsx
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   AppBar,
@@ -29,6 +28,9 @@ import LoyaltyIcon from "@mui/icons-material/Loyalty";
 
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/shared/auth/AuthContext";
+
+// ⭐ Logo de la marca
+import Logo from "@/assets/Logo.png";
 
 const drawerWidth = 240;
 
@@ -65,7 +67,7 @@ function initials(text: string) {
   const t = (text || "").trim();
   if (!t) return "U";
   const first = t[0] ?? "";
-  return (first).toUpperCase();
+  return first.toUpperCase();
 }
 
 export default function AppLayout() {
@@ -82,7 +84,9 @@ export default function AppLayout() {
   const isAdmin = role === "admin";
 
   // Submenú de configuración (abierto si estás en /configuracion/*)
-  const [openConfig, setOpenConfig] = useState(pathname.startsWith("/configuracion"));
+  const [openConfig, setOpenConfig] = useState(
+    pathname.startsWith("/configuracion")
+  );
   useEffect(() => {
     setOpenConfig(pathname.startsWith("/configuracion"));
   }, [pathname]);
@@ -108,7 +112,11 @@ export default function AppLayout() {
       ? [
           { to: "/mi-negocio", label: "Mi negocio", icon: <StoreIcon /> },
           { to: "/mis-usuarios", label: "Mis usuarios", icon: <PeopleIcon /> },
-          { to: "/notificaciones", label: "Notificaciones", icon: <NotificationsIcon /> },
+          {
+            to: "/notificaciones",
+            label: "Notificaciones",
+            icon: <NotificationsIcon />,
+          },
         ]
       : []),
 
@@ -116,9 +124,7 @@ export default function AppLayout() {
     {
       kind: "config" as const,
       visible: isSuperAdmin || isAdmin,
-      // selected si estás en cualquier ruta de /configuracion/*
       selected: pathname.startsWith("/configuracion"),
-      // Hijos según rol
       children: isSuperAdmin
         ? [
             { to: "/configuracion/negocio", label: "Negocio", icon: <StoreIcon /> },
@@ -147,7 +153,7 @@ export default function AppLayout() {
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "background.default" }}>
       {/* TOP BAR */}
       <AppBar position="fixed" color="primary" sx={{ zIndex: 1201 }}>
-        <Toolbar>
+        <Toolbar sx={{ px: 2 }}>
           <IconButton
             color="inherit"
             edge="start"
@@ -157,11 +163,20 @@ export default function AppLayout() {
             <MenuIcon />
           </IconButton>
 
-          <Typography variant="h6" fontWeight={800}>
-            PyMe Fiel Admin
-          </Typography>
+          {/* ⭐ Logo + nombre del sistema */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+            <Box
+              component="img"
+              src={Logo}
+              alt="PyMe Fiel"
+              sx={{ height: 30, width: "auto" }}
+            />
+            <Typography variant="h6" fontWeight={800}>
+              PyMe Fiel Admin
+            </Typography>
+          </Box>
 
-          {/* Bienvenida */}
+          {/* Bienvenida a la derecha */}
           <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 1.5 }}>
             <Tooltip title={displayName}>
               <Avatar sx={{ width: 32, height: 32, bgcolor: "secondary.main" }}>
@@ -189,7 +204,23 @@ export default function AppLayout() {
           },
         }}
       >
-        <Toolbar />
+        {/* Header del drawer con logo */}
+        <Toolbar
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            px: 2,
+          }}
+        >
+          <Box
+            component="img"
+            src={Logo}
+            alt="PyMe Fiel"
+            sx={{ height: 28, width: "auto" }}
+          />
+        </Toolbar>
+
         <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
           <List sx={{ px: 1 }}>
             {menuItems.map((item, idx) => {
@@ -224,7 +255,6 @@ export default function AppLayout() {
                             key={c.to}
                             component={NavLink}
                             to={c.to}
-                            // selected si la ruta actual empieza con el hijo
                             selected={pathname.startsWith(c.to)}
                             sx={{ borderRadius: 2, mb: 0.5 }}
                           >

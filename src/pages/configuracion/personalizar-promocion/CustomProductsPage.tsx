@@ -94,16 +94,27 @@ export default function CustomProductsPage() {
 
   // validaciones
   const metaNum = React.useMemo(() => toNumberSafe(form.meta, NaN), [form.meta]);
-  const pctNum = React.useMemo(() => toNumberSafe(form.porcentajePorCompra, NaN), [form.porcentajePorCompra]);
+  const pctNum = React.useMemo(
+    () => toNumberSafe(form.porcentajePorCompra, NaN),
+    [form.porcentajePorCompra]
+  );
+
+  // ahora siempre trabajamos con "Compra" como tipo de acumulación
+  const pctRequired = true;
+
   const metaValid = Number.isFinite(metaNum) && metaNum > 0;
-  const pctValid = Number.isFinite(pctNum) && pctNum > 0 && pctNum <= 100;
+  const pctValid =
+    !pctRequired || (Number.isFinite(pctNum) && pctNum > 0 && pctNum <= 100);
+
   const nombreOk = form.nombreProducto.trim().length > 0;
   const canSave = nombreOk && metaValid && pctValid;
 
   // toast
   const [toastOpen, setToastOpen] = React.useState(false);
   const [toastMsg, setToastMsg] = React.useState("");
-  const [toastSeverity, setToastSeverity] = React.useState<"success" | "error">("success");
+  const [toastSeverity, setToastSeverity] = React.useState<"success" | "error">(
+    "success"
+  );
   const showToast = (m: string, s: "success" | "error") => {
     setToastMsg(m);
     setToastSeverity(s);
@@ -123,7 +134,10 @@ export default function CustomProductsPage() {
         setRows(resp.data.map((p) => ({ ...p, id: p.idProductoCustom })));
       } else {
         setRows([]);
-        showToast(resp.message || "No se pudieron cargar las promociones.", "error");
+        showToast(
+          resp.message || "No se pudieron cargar las promociones.",
+          "error"
+        );
       }
     } catch (e: any) {
       setRows([]);
@@ -132,7 +146,9 @@ export default function CustomProductsPage() {
       setLoading(false);
     }
   }, []);
-  React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    load();
+  }, [load]);
 
   const clearForm = () =>
     setForm({
@@ -170,8 +186,11 @@ export default function CustomProductsPage() {
       nombreProducto: form.nombreProducto.trim(),
       descripcion: form.descripcion.trim() || null,
       meta: toNumberSafe(form.meta, 0),
-      porcentajePorCompra: toNumberSafe(form.porcentajePorCompra, 0),
-      tipoAcumulacion: form.tipoAcumulacion,
+      porcentajePorCompra: pctRequired
+        ? toNumberSafe(form.porcentajePorCompra, 0)
+        : 0,
+      // tipoAcumulacion: mantenemos el valor del form (por defecto "Compra")
+      tipoAcumulacion: form.tipoAcumulacion || "Compra",
       recompensa: form.recompensa.trim() || null,
       estado: form.estado,
     };
@@ -179,7 +198,11 @@ export default function CustomProductsPage() {
     try {
       const resp = await productosService.upsertProductoCustom(req);
       if (resp.status === 200 || resp.status === 201) {
-        showToast(resp.message || (isEditing ? "Promoción actualizada" : "Promoción creada"), "success");
+        showToast(
+          resp.message ||
+            (isEditing ? "Promoción actualizada" : "Promoción creada"),
+          "success"
+        );
         clearForm();
         await load();
       } else {
@@ -191,14 +214,46 @@ export default function CustomProductsPage() {
   };
 
   const onConfirmDelete = async () => {
-    // cuando tengas el DELETE, llama al service aquí
-    setDeleteOpen(false);
+    if (!form.idProductoCustom) {
+      setDeleteOpen(false);
+      return;
+    }
+
+    try {
+      const resp = await productosService.deleteProductoCustom(
+        form.idProductoCustom
+      );
+
+      if (resp.status === 200 && resp.data) {
+        showToast(
+          resp.message || "Promoción eliminada correctamente.",
+          "success"
+        );
+        clearForm();
+        await load();
+      } else {
+        showToast(
+          resp.message || "No se pudo eliminar la promoción.",
+          "error"
+        );
+      }
+    } catch (e: any) {
+      showToast(e?.message ?? "Error al eliminar.", "error");
+    } finally {
+      setDeleteOpen(false);
+    }
   };
 
   const columns: GridColDef<Row>[] = [
     { field: "nombreProducto", headerName: "Producto", flex: 1.2 },
     { field: "descripcion", headerName: "Descripción", flex: 1.4 },
-    { field: "meta", headerName: "Meta (compras)", width: 140, align: "center", headerAlign: "center" },
+    {
+      field: "meta",
+      headerName: "Meta (compras)",
+      width: 140,
+      align: "center",
+      headerAlign: "center",
+    },
     {
       field: "porcentajePorCompra",
       headerName: "% por compra",
@@ -216,7 +271,11 @@ export default function CustomProductsPage() {
       align: "center",
       headerAlign: "center",
       renderCell: (p) =>
-        p.value ? <CheckIcon color="success" fontSize="small" /> : <RemoveIcon color="disabled" fontSize="small" />,
+        p.value ? (
+          <CheckIcon color="success" fontSize="small" />
+        ) : (
+          <RemoveIcon color="disabled" fontSize="small" />
+        ),
       sortable: false,
       filterable: false,
     },
@@ -227,11 +286,21 @@ export default function CustomProductsPage() {
   return (
     <Box className="mx-auto w-full max-w-[1800px] px-4 md:px-6 py-4">
       {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ mb: 2 }}
+      >
         <Typography variant="h4" color="primary">
           Promociones
         </Typography>
-        <Chip icon={<LoyaltyIcon />} label="Solo ADMIN" color="secondary" variant="outlined" />
+        <Chip
+          icon={<LoyaltyIcon />}
+          label="Solo ADMIN"
+          color="secondary"
+          variant="outlined"
+        />
       </Stack>
 
       {/* Formulario */}
@@ -251,19 +320,17 @@ export default function CustomProductsPage() {
           <TextField
             label="Producto"
             value={form.nombreProducto}
-            onChange={(e) => setForm((f) => ({ ...f, nombreProducto: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, nombreProducto: e.target.value }))
+            }
             required
           />
+          {/* Tipo de acumulación ahora es solo texto, sin dropdown */}
           <TextField
             label="Tipo de acumulación"
-            select
-            value={form.tipoAcumulacion}
-            onChange={(e) => setForm((f) => ({ ...f, tipoAcumulacion: e.target.value }))}
-          >
-            <MenuItem value="Compra">Compra</MenuItem>
-            <MenuItem value="Monto">Monto</MenuItem>
-            <MenuItem value="Cantidad">Cantidad</MenuItem>
-          </TextField>
+            value={form.tipoAcumulacion || "Compra"}
+            disabled
+          />
 
           <TextField
             label="Meta (compras necesarias)"
@@ -277,22 +344,39 @@ export default function CustomProductsPage() {
           <TextField
             label="% por compra"
             value={form.porcentajePorCompra}
-            onChange={(e) => setForm((f) => ({ ...f, porcentajePorCompra: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                porcentajePorCompra: e.target.value,
+              }))
+            }
             inputProps={{ inputMode: "decimal" }}
-            error={form.porcentajePorCompra !== "" && !pctValid}
-            helperText="Entre 0 y 100. Ej. 20"
-            required
+            error={
+              pctRequired &&
+              form.porcentajePorCompra !== "" &&
+              !pctValid
+            }
+            helperText={
+              pctRequired
+                ? "Entre 0 y 100. Ej. 20"
+                : "Opcional para tipo Monto"
+            }
+            required={pctRequired}
           />
 
           <TextField
             label="Recompensa (texto)"
             value={form.recompensa}
-            onChange={(e) => setForm((f) => ({ ...f, recompensa: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, recompensa: e.target.value }))
+            }
           />
           <TextField
             label="Descripción (opcional)"
             value={form.descripcion}
-            onChange={(e) => setForm((f) => ({ ...f, descripcion: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, descripcion: e.target.value }))
+            }
             multiline
             minRows={1}
           />
@@ -300,7 +384,14 @@ export default function CustomProductsPage() {
 
         <FormControlLabel
           sx={{ mt: 1 }}
-          control={<Switch checked={form.estado} onChange={(e) => setForm((f) => ({ ...f, estado: e.target.checked }))} />}
+          control={
+            <Switch
+              checked={form.estado}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, estado: e.target.checked }))
+              }
+            />
+          }
           label="Activo"
         />
 
@@ -309,12 +400,22 @@ export default function CustomProductsPage() {
             Nuevo
           </Button>
           {isEditing && (
-            <Button startIcon={<CancelIcon />} variant="outlined" color="warning" onClick={clearForm}>
+            <Button
+              startIcon={<CancelIcon />}
+              variant="outlined"
+              color="warning"
+              onClick={clearForm}
+            >
               Cancelar edición
             </Button>
           )}
           {isEditing && (
-            <Button startIcon={<DeleteIcon />} variant="outlined" color="error" onClick={() => setDeleteOpen(true)}>
+            <Button
+              startIcon={<DeleteIcon />}
+              variant="outlined"
+              color="error"
+              onClick={() => setDeleteOpen(true)}
+            >
               Eliminar
             </Button>
           )}
@@ -332,13 +433,23 @@ export default function CustomProductsPage() {
 
       {/* GRID */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
-        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 1 }}>
+        <Typography
+          variant="h6"
+          fontWeight={700}
+          color="primary"
+          sx={{ mb: 1 }}
+        >
           Promociones del negocio
         </Typography>
         <Divider sx={{ mb: 2 }} />
 
         {/* Buscador + refresh */}
-        <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 3, maxWidth: { xs: "100%", md: 720 } }}>
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1.5}
+          sx={{ mb: 3, maxWidth: { xs: "100%", md: 720 } }}
+        >
           <TextField
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -355,14 +466,18 @@ export default function CustomProductsPage() {
               color="primary"
               onClick={() => load()}
               disabled={loading}
-              sx={{ "&:hover": { backgroundColor: "primary.light", color: "#fff" } }}
+              sx={{
+                "&:hover": { backgroundColor: "primary.light", color: "#fff" },
+              }}
             >
               <RefreshIcon />
             </IconButton>
           </Tooltip>
         </Stack>
 
-        <Box sx={{ height: Math.min(700, 120 + paginationModel.pageSize * 55), width: "100%" }}>
+        <Box
+          sx={{ height: dynamicHeight, width: "100%" }}
+        >
           <DataGrid
             rows={rows.filter((r) => {
               const q = search.trim().toLowerCase();
@@ -384,27 +499,48 @@ export default function CustomProductsPage() {
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[5, 10, 20, 50]}
-            getRowClassName={(p) => (p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd")}
+            getRowClassName={(p) =>
+              p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd"
+            }
             sx={{
               borderRadius: 3,
-              "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
+              "& .MuiDataGrid-columnHeaders": {
+                backgroundColor: "action.hover",
+                fontWeight: 700,
+              },
               "& .row-even": { backgroundColor: "#ffffff" },
               "& .row-odd": { backgroundColor: "rgba(14,165,233,0.06)" },
-              "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.12) !important" },
-              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
+              "& .MuiDataGrid-row:hover": {
+                backgroundColor: "rgba(14,165,233,0.12) !important",
+              },
+              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
+                outline: "none",
+              },
             }}
           />
         </Box>
       </Paper>
 
       {/* DIALOG ELIMINAR */}
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Eliminar promoción</DialogTitle>
+      <Dialog
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ color: "primary.main", fontWeight: 700 }}>
+          Eliminar promoción
+        </DialogTitle>
         <DialogContent>
-          Esta acción desactivará o eliminará la configuración de la promoción. ¿Deseas continuar?
+          Esta acción desactivará o eliminará la configuración de la promoción.
+          ¿Deseas continuar?
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button variant="outlined" onClick={() => setDeleteOpen(false)}>
+          <Button
+            variant="outlined"
+            color="warning"
+            onClick={() => setDeleteOpen(false)}
+          >
             Cancelar
           </Button>
           <Button
@@ -426,7 +562,12 @@ export default function CustomProductsPage() {
         onClose={() => setToastOpen(false)}
         anchorOrigin={{ vertical: "top", horizontal: "right" }}
       >
-        <Alert onClose={() => setToastOpen(false)} severity={toastSeverity} variant="filled" sx={{ width: "100%" }}>
+        <Alert
+          onClose={() => setToastOpen(false)}
+          severity={toastSeverity}
+          variant="filled"
+          sx={{ width: "100%" }}
+        >
           {toastMsg}
         </Alert>
       </Snackbar>

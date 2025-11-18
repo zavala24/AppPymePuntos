@@ -20,16 +20,21 @@ import VisibilityOff from "@mui/icons-material/VisibilityOff";
 import LoginIcon from "@mui/icons-material/Login";
 import { useAuth } from "@/shared/auth/AuthContext";
 
+// ⭐ Logo principal
+import Logo from "@/assets/LogoSinFondo.png";
+
 export default function LoginPage() {
   const { login, error: authError, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const location = useLocation() as any;
 
-  // Si venía de una ruta protegida, volver ahí; si no, dashboard
   const from = location.state?.from?.pathname || "/dashboard";
 
   // Estado UI
-  const remembered = React.useMemo(() => localStorage.getItem("rememberUser") ?? "", []);
+  const remembered = React.useMemo(
+    () => localStorage.getItem("rememberUser") ?? "",
+    []
+  );
   const [email, setEmail] = React.useState(remembered);
   const [password, setPassword] = React.useState("");
   const [showPassword, setShowPassword] = React.useState(false);
@@ -39,7 +44,6 @@ export default function LoginPage() {
 
   const canSubmit = email.trim().length > 0 && password.trim().length > 0;
 
-  // Si ya está autenticado y aterriza en /login, redirige 1 sola vez
   React.useEffect(() => {
     if (isAuthenticated) navigate(from, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -57,8 +61,11 @@ export default function LoginPage() {
     try {
       setLoading(true);
 
-      if (remember) localStorage.setItem("rememberUser", email.trim());
-      else localStorage.removeItem("rememberUser");
+      if (remember) {
+        localStorage.setItem("rememberUser", email.trim());
+      } else {
+        localStorage.removeItem("rememberUser");
+      }
 
       const ok = await login({ userOrEmail: email.trim(), password });
       if (ok) {
@@ -76,96 +83,164 @@ export default function LoginPage() {
       sx={{
         minHeight: "100vh",
         display: "grid",
-        gridTemplateColumns: { xs: "1fr", md: "1.2fr 1fr" },
-        bgcolor: "linear-gradient(135deg, #eef2ff 0%, #f8fafc 100%)",
+        gridTemplateColumns: { xs: "1fr", md: "1.25fr 0.9fr" },
+        background:
+          "linear-gradient(135deg, #eef2ff 0%, #f8fafc 40%, #ffffff 100%)",
       }}
-      className="bg-gradient-to-br from-slate-50 to-white"
     >
-      {/* Columna izquierda: branding */}
+      {/* ===============================
+          COLUMNA IZQUIERDA (BRANDING)
+      ================================ */}
       <Box
         sx={{
           position: "relative",
-          overflow: "hidden",
           display: { xs: "none", md: "flex" },
           alignItems: "center",
-          justifyContent: "center",
-          p: 6,
-          background:
-            "radial-gradient(1200px 600px at -10% -10%, rgba(59,130,246,0.08), transparent), radial-gradient(900px 500px at 110% 0%, rgba(16,185,129,0.08), transparent)",
+          justifyContent: "flex-start",
+          pl: { md: 10, lg: 14 },
+          pr: 4,
+          py: 6,
+          overflow: "hidden",
         }}
       >
-        <Box sx={{ maxWidth: 520 }}>
-          <Typography variant="h2" fontWeight={800} color="primary" gutterBottom>
-            PyMe Fiel Admin
+        {/* Fondo decorativo suave */}
+        <Box
+          sx={{
+            position: "absolute",
+            inset: "-20%",
+            background:
+              "radial-gradient(circle at top left, rgba(59,130,246,0.12), transparent 60%), radial-gradient(circle at bottom right, rgba(34,197,94,0.09), transparent 55%)",
+            opacity: 0.9,
+            zIndex: 0,
+          }}
+        />
+        <Box sx={{ position: "relative", zIndex: 1, maxWidth: 520 }}>
+          {/* Logo grande */}
+          <Box sx={{ mb: 4 }}>
+            <img
+              src={Logo}
+              alt="PyMe Fiel"
+              style={{
+                width: "230px",
+                height: "auto",
+                display: "block",
+                filter: "drop-shadow(0px 10px 25px rgba(15,23,42,0.18))",
+              }}
+            />
+          </Box>
+
+          <Typography
+            variant="h3"
+            fontWeight={900}
+            color="primary"
+            sx={{ mb: 1 }}
+          >
+            Bienvenido a PyMe Fiel
           </Typography>
-          <Typography variant="h6" color="text.secondary" sx={{ mb: 3 }}>
-            Inicia sesión para administrar negocios, usuarios y notificaciones.
+
+          <Typography
+            variant="h6"
+            color="text.secondary"
+            sx={{ mb: 4, maxWidth: 460 }}
+          >
+            Administra negocios, usuarios, promociones y métricas de tu
+            programa de lealtad en un solo lugar.
           </Typography>
 
           <Box
             sx={{
-              mt: 4,
+              mt: 2,
               borderRadius: 4,
               p: 3,
-              backdropFilter: "blur(6px)",
-              backgroundColor: "rgba(255,255,255,0.6)",
-              border: "1px solid rgba(226,232,240,0.7)",
+              backgroundColor: "rgba(255,255,255,0.85)",
+              border: "1px solid rgba(226,232,240,0.9)",
+              boxShadow: "0 18px 45px rgba(15,23,42,0.06)",
             }}
           >
-            <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1 }}>
+            <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }} color="primary">
               ¿Qué incluye?
             </Typography>
-            <ul className="list-disc ml-5 text-slate-600 leading-relaxed">
-              <li>Panel de control con métricas.</li>
+            <Box
+              component="ul"
+              sx={{
+                pl: 3,
+                m: 0,
+                color: "text.secondary",
+                fontSize: 14,
+                lineHeight: 1.8,
+              }}
+            >
+              <li>Panel de control con métricas en tiempo real.</li>
               <li>Gestión de negocios y usuarios.</li>
               <li>Notificaciones y configuraciones avanzadas.</li>
-              <li>Promociónes personalizadas.</li>
-            </ul>
+              <li>Promociones personalizadas para tus clientes.</li>
+            </Box>
           </Box>
         </Box>
       </Box>
 
-      {/* Columna derecha: tarjeta de login */}
-      <Box className="flex items-center justify-center p-6 md:p-10">
+      {/* ===============================
+          COLUMNA DERECHA (LOGIN CARD)
+      ================================ */}
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          p: { xs: 3, md: 6 },
+        }}
+      >
         <Paper
-          elevation={0}
+          elevation={4}
           sx={{
             width: "100%",
-            maxWidth: 460,
+            maxWidth: 440,
             p: { xs: 3, md: 4 },
             borderRadius: 4,
-            border: "1px solid",
-            borderColor: "divider",
-            backdropFilter: "blur(8px)",
+            border: "1px solid rgba(226,232,240,0.9)",
+            boxShadow:
+              "0 18px 45px rgba(15,23,42,0.08), 0 0 0 1px rgba(255,255,255,0.7)",
+            backdropFilter: "blur(10px)",
+            backgroundColor: "rgba(255,255,255,0.96)",
           }}
         >
-          <Stack direction="row" alignItems="center" justifyContent="space-between">
+          {/* Header de la tarjeta */}
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            sx={{ mb: 1.5 }}
+          >
             <Box>
-              <Typography variant="h5" fontWeight={800}>
-                Bienvenido 👋
+              <Typography variant="h5" fontWeight={800} color="primary">
+                Iniciar sesión
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Usa tus credenciales para continuar
+                Ingresa tus credenciales para continuar
               </Typography>
             </Box>
-            {/* Logo placeholder */}
+
+            {/* Mini logo dentro de un círculo */}
             <Box
               sx={{
                 width: 48,
                 height: 48,
-                borderRadius: 2,
-                bgcolor: "primary.main",
-                color: "primary.contrastText",
-                display: "grid",
-                placeItems: "center",
-                fontWeight: 800,
+                borderRadius: "999px",
+                overflow: "hidden",
+                border: "1px solid rgba(226,232,240,0.9)",
+                boxShadow: "0 6px 16px rgba(15,23,42,0.18)",
+                backgroundColor: "#ffffff",
               }}
             >
-              PF
+              <img
+                src={Logo}
+                alt="PyMe Fiel logo"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+              />
             </Box>
           </Stack>
 
-          <Divider sx={{ my: 3 }} />
+          <Divider sx={{ my: 2.5 }} />
 
           {(error || authError) && (
             <Alert severity="error" sx={{ mb: 2 }}>
@@ -173,8 +248,9 @@ export default function LoginPage() {
             </Alert>
           )}
 
+          {/* Formulario */}
           <form onSubmit={onSubmit} noValidate>
-            <Stack spacing={2}>
+            <Stack spacing={2.2}>
               <TextField
                 label="Email o usuario"
                 value={email}
@@ -192,18 +268,34 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 required
                 fullWidth
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && canSubmit && !loading) onSubmit(e as any);
-                }}
                 InputProps={{
                   endAdornment: (
                     <InputAdornment position="end">
-                      <IconButton onClick={() => setShowPassword((v) => !v)} edge="end">
+                      <IconButton
+                        onClick={() => setShowPassword((v) => !v)}
+                        edge="end"
+                      >
                         {showPassword ? <VisibilityOff /> : <Visibility />}
                       </IconButton>
                     </InputAdornment>
                   ),
                 }}
+              />
+
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={remember}
+                    onChange={(e) => setRemember(e.target.checked)}
+                    size="small"
+                  />
+                }
+                label={
+                  <Typography variant="body2" color="text.secondary">
+                    Recordar usuario
+                  </Typography>
+                }
+                sx={{ mt: -0.5 }}
               />
 
               <Button
@@ -212,7 +304,13 @@ export default function LoginPage() {
                 size="large"
                 startIcon={<LoginIcon />}
                 disabled={!canSubmit || loading}
-                sx={{ py: 1.2, borderRadius: 2, fontWeight: 700 }}
+                sx={{
+                  py: 1.3,
+                  borderRadius: 2.5,
+                  fontWeight: 700,
+                  textTransform: "none",
+                  fontSize: 15,
+                }}
               >
                 {loading ? "Ingresando..." : "Iniciar sesión"}
               </Button>
@@ -221,8 +319,14 @@ export default function LoginPage() {
 
           <Divider sx={{ my: 3 }} />
 
-          <Typography variant="caption" color="text.secondary" display="block" textAlign="center">
-            © {new Date().getFullYear()} PyMe Fiel — Todos los derechos reservados
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            display="block"
+            textAlign="center"
+          >
+            © {new Date().getFullYear()} PyMe Fiel — Todos los derechos
+            reservados
           </Typography>
         </Paper>
       </Box>
