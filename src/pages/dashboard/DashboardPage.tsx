@@ -1464,12 +1464,6 @@ export default function DashboardPage() {
             </Stack>
           </Stack>
 
-          {error && (
-            <Typography color="error" mb={2}>
-              {error}
-            </Typography>
-          )}
-
           {loading && !data ? (
             <Box display="flex" justifyContent="center" py={6}>
               <CircularProgress />
