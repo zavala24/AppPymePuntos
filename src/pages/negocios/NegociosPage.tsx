@@ -197,12 +197,20 @@ export default function NegociosPage() {
       field: "nombre",
       headerName: "Nombre",
       flex: 1.1,
-      renderCell: (p) => (
+    renderCell: (p) => (
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",   
+          height: "100%",        
+        }}
+      >
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography fontWeight={600}>{p.value as string}</Typography>
           {p.row.activo && <CheckIcon fontSize="small" color="success" />}
         </Stack>
-      ),
+      </Box>
+    ),
     },
     { field: "categoria", headerName: "Categoría", flex: 0.9 },
     { field: "facebook", headerName: "Facebook", flex: 1 },
