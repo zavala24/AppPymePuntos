@@ -10,6 +10,7 @@ import {
   VentaRowDto,
 } from "../dtos/ventas/DashboardVentasDto";
 import { UpdateVentaFromRowDto } from "../dtos/ventas/UpdateVentaFromRowDto ";
+import { DeleteVentaFromRowDto } from "../dtos/ventas/DeleteVentaFromRowDto";
 
 
 export class SellService {
@@ -30,5 +31,11 @@ export class SellService {
 
     async updateVentaFromRow(dto: UpdateVentaFromRowDto): Promise<ServiceResponse<VentaRowDto>> {
     return this.repo.updateVentaFromRow(dto);
+  }
+
+    async deleteVentaFromRow(
+    dto: DeleteVentaFromRowDto
+  ): Promise<ServiceResponse<boolean>> {
+    return this.repo.deleteVentaFromRow(dto);
   }
 }

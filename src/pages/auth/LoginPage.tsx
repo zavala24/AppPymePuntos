@@ -282,22 +282,6 @@ export default function LoginPage() {
                 }}
               />
 
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={remember}
-                    onChange={(e) => setRemember(e.target.checked)}
-                    size="small"
-                  />
-                }
-                label={
-                  <Typography variant="body2" color="text.secondary">
-                    Recordar usuario
-                  </Typography>
-                }
-                sx={{ mt: -0.5 }}
-              />
-
               <Button
                 type="submit"
                 variant="contained"

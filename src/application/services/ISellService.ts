@@ -8,6 +8,7 @@ import {
   VentaRowDto,
 } from "@/application/dtos/ventas/DashboardVentasDto";
 import { UpdateVentaFromRowDto } from "../dtos/ventas/UpdateVentaFromRowDto ";
+import { DeleteVentaFromRowDto } from "../dtos/ventas/DeleteVentaFromRowDto";
 
 
 
@@ -22,4 +23,8 @@ export interface ISellService {
   ): Promise<ServiceResponse<DashboardVentasCustomResponse>>;
 
   updateVentaFromRow(dto: UpdateVentaFromRowDto): Promise<ServiceResponse<VentaRowDto>>;
+
+    deleteVentaFromRow(
+    dto: DeleteVentaFromRowDto
+  ): Promise<ServiceResponse<boolean>>;
 }

@@ -11,6 +11,7 @@ import {
   VentaRowDto,
 } from "@/application/dtos/ventas/DashboardVentasDto";
 import { UpdateVentaFromRowRequest } from "@/application/dtos/ventas/UpdateVentaFromRowRequest";
+import { DeleteVentaFromRowDto } from "@/application/dtos/ventas/DeleteVentaFromRowDto";
 
 
 /** Helper: convierte Date | string | null a ISO string (o undefined) para query */
@@ -78,6 +79,17 @@ export class SellRepository implements ISellRepository {
     const { data } = await api.put<ServiceResponse<VentaRowDto>>(
       `${this.base}/UpdateVentaFromRow`,
       req
+    );
+    return data;
+  }
+
+    async deleteVentaFromRow(
+    req: DeleteVentaFromRowDto
+  ): Promise<ServiceResponse<boolean>> {
+    // El endpoint espera [FromBody], así que el body va en config.data
+    const { data } = await api.delete<ServiceResponse<boolean>>(
+      `${this.base}/DeleteVentaFromRow`,
+      { data: req }
     );
     return data;
   }
