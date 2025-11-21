@@ -34,6 +34,7 @@ import SearchIcon from "@mui/icons-material/Search";
 import EditIcon from "@mui/icons-material/Edit";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import CancelIcon from "@mui/icons-material/Cancel";
+import DeleteIcon from "@mui/icons-material/Delete";
 
 import {
   BarChart,
@@ -75,13 +76,20 @@ import { api } from "@/infrastructure/http/api";
 
 const sellService = new SellService(new SellRepository());
 
-// ===== DTO local para actualizar (evita errores si aún no tienes el archivo de tipos) =====
+// DTO local para actualizar
 type UpdateVentaFromRowDto = {
   folio: number;
   articulo: string;
   descripcion: string;
   monto: number;
   cantidad: number;
+  idNegocio: number;
+  usuarioNombre: string;
+};
+
+// DTO local para eliminar (front)
+type DeleteVentaFromRowDto = {
+  folio: number;
   idNegocio: number;
   usuarioNombre: string;
 };
@@ -234,6 +242,11 @@ export default function DashboardPage() {
   // Snapshot para poder revertir al cancelar
   const [editInitialForm, setEditInitialForm] =
     React.useState<EditForm | null>(null);
+
+  // ===== Eliminar venta =====
+  const [deleteRow, setDeleteRow] = React.useState<VentaRowDto | null>(null);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
 
   // ===== Toasts =====
   const [toastOpen, setToastOpen] = React.useState(false);
@@ -487,6 +500,12 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterToken]);
 
+  // 🔎 Nuevo: cuando cambia el texto buscado, refrescamos las filas desde la API
+  React.useEffect(() => {
+    // si ya se digitó algo (o se limpió), recargamos las filas
+    refreshGridRowsOnly();
+  }, [debouncedSearch, refreshGridRowsOnly]);
+
   // KPIs
   const kpis = React.useMemo(() => {
     if (!data) return [];
@@ -502,7 +521,7 @@ export default function DashboardPage() {
         icon: <AttachMoneyIcon sx={{ color: "#34d399" }} />,
       },
       {
-        label: "Puntos generados",
+        label: "CashBack",
         value: data.puntosGenerados.toFixed(2),
         icon: <PercentIcon sx={{ color: "#a78bfa" }} />,
       },
@@ -513,90 +532,6 @@ export default function DashboardPage() {
       },
     ];
   }, [data]);
-
-  // Columnas del grid (se agrega la de Editar al final)
-  const columns: GridColDef<VentaRowDto>[] = [
-    { field: "folio", headerName: "Folio", width: 80 },
-    { field: "articulo", headerName: "Artículo", width: 140 },
-    { field: "descripcion", headerName: "Descripción", flex: 1, minWidth: 160 },
-    { field: "telefonoCliente", headerName: "Teléfono", width: 100 },
-    {
-      field: "monto",
-      headerName: "Monto",
-      width: 140,
-      align: "center",
-      headerAlign: "center",
-      valueFormatter: (p) => fmtCurrency(p as number),
-    },
-    {
-      field: "puntosGenerados",
-      headerName: "Puntos",
-      width: 120,
-      align: "center",
-      headerAlign: "center",
-      valueFormatter: (p) => Number(p as number).toFixed(2),
-    },
-    {
-      field: "cobrado",
-      headerName: "Cobrado",
-      width: 140,
-      align: "center",
-      headerAlign: "center",
-      valueFormatter: (p) => fmtCurrency(p as number),
-    },
-    {
-      field: "creadoFecha",
-      headerName: "Fecha",
-      width: 150,
-      valueFormatter: (p) => fmtDate(p as string),
-    },
-    {
-      field: "esCustom",
-      headerName: "Especial",
-      width: 100,
-      align: "center",
-      headerAlign: "center",
-      sortable: true,
-      renderCell: (p) =>
-        isCustom(p.row.esCustom) ? (
-          <MuiTooltip title="Producto personalizado" arrow>
-            <AutoFixHighIcon sx={{ color: "#a78bfa" }} />
-          </MuiTooltip>
-        ) : null,
-    },
-    {
-      field: "editar",
-      headerName: "Editar",
-      width: 90,
-      sortable: false,
-      filterable: false,
-      align: "center",
-      headerAlign: "center",
-      renderCell: (p) => {
-        const custom = isCustom(p.row.esCustom);
-        return (
-          <MuiTooltip
-            title={custom ? "No editable (personalizado)" : "Editar venta"}
-            arrow
-          >
-            <span>
-              <IconButton
-                size="small"
-                onClick={() => !custom && openEditModal(p.row)}
-                aria-label="Editar"
-                sx={{ color: "primary.main" }}
-                disabled={custom}
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </span>
-          </MuiTooltip>
-        );
-      },
-    },
-  ];
-
-  const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
   // ==== Helper: limitar a máx. 7 días hacia atrás desde "hasta" ====
   const withinLast7Days = (iso: string) => {
@@ -722,7 +657,6 @@ export default function DashboardPage() {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Ventas");
 
-      // Estilos simples (encabezado + zebra) – se castea a any
       const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
       for (let R = range.s.r; R <= range.e.r; ++R) {
         for (let C = range.s.c; C <= range.e.c; ++C) {
@@ -730,14 +664,12 @@ export default function DashboardPage() {
           const cell = (ws as any)[cellAddress];
           if (!cell) continue;
           if (R === range.s.r) {
-            // header
             cell.s = {
               font: { bold: true, color: { rgb: "FFFFFFFF" } },
               fill: { fgColor: { rgb: "2563EB" }, patternType: "solid" },
               alignment: { horizontal: "center" },
             };
           } else if (R % 2 === 0) {
-            // zebra
             cell.s = {
               fill: { fgColor: { rgb: "F1F5F9" }, patternType: "solid" },
             };
@@ -799,13 +731,11 @@ export default function DashboardPage() {
 
       if (!customData?.series?.length) return result;
 
-      // Filtrar puntos por última semana
       const filteredSeries = customData.series.map((s) => ({
         ...s,
         data: s.data.filter((p) => withinLast7Days(String(p.fecha))),
       }));
 
-      // Totales por promoción
       const totals = new Map<string, number>();
       filteredSeries.forEach((s) => {
         const total = s.data.reduce((acc, p) => acc + p.ventas, 0);
@@ -822,7 +752,6 @@ export default function DashboardPage() {
       const top10 = ranking.slice(0, 10);
       const topNames = top10.map((x) => x.name);
 
-      // Fechas únicas
       const allDates = new Set<string>();
       filteredSeries.forEach((s) =>
         s.data.forEach((p) => {
@@ -876,6 +805,179 @@ export default function DashboardPage() {
       `promos_custom_${new Date().toISOString().slice(0, 10)}.xlsx`
     );
   };
+
+  // ====== Eliminar venta: handlers (sin contraseña) ======
+  const onClickDeleteRow = (row: VentaRowDto) => {
+    const custom = isCustom(row.esCustom);
+    if (custom) return;
+    setDeleteRow(row);
+    setConfirmDeleteOpen(true);
+  };
+
+  const handleCancelConfirmDelete = () => {
+    if (deleting) return;
+    setConfirmDeleteOpen(false);
+    setDeleteRow(null);
+  };
+
+  const handleDeleteVenta = async () => {
+    if (!deleteRow) return;
+
+    const idNegocio =
+      typeof negocioId === "number" ? negocioId : getIdNegocioActual() ?? 0;
+
+    const dto: DeleteVentaFromRowDto = {
+      folio: Number(deleteRow.folio),
+      idNegocio,
+      usuarioNombre,
+    };
+
+    try {
+      setDeleting(true);
+      const { data } = await api.delete<ServiceResponse<boolean>>(
+        "/Sell/DeleteVentaFromRow",
+        { data: dto }
+      );
+
+      if (data.status === 200 && (data.data === true || data.data == null)) {
+        await refreshGridRowsOnly();
+        showToast(data.message || "Venta eliminada con éxito.", "success");
+      } else {
+        showToast(
+          data.message || "No se pudo eliminar la venta.",
+          "error"
+        );
+      }
+    } catch (e: any) {
+      showToast(
+        e?.message ?? "Error de red al eliminar la venta.",
+        "error"
+      );
+    } finally {
+      setDeleting(false);
+      setConfirmDeleteOpen(false);
+      setDeleteRow(null);
+    }
+  };
+
+  // Columnas del grid (con columna de Eliminar)
+  const columns: GridColDef<VentaRowDto>[] = [
+    { field: "folio", headerName: "Folio", width: 80 },
+    { field: "articulo", headerName: "Artículo", width: 140 },
+    { field: "descripcion", headerName: "Descripción", flex: 1, minWidth: 160 },
+    { field: "telefonoCliente", headerName: "Teléfono", width: 100 },
+    { field: "cantidad", headerName: "Cantidad", width: 80, align: "center",},
+    {
+      field: "monto",
+      headerName: "Monto",
+      width: 140,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => fmtCurrency(p as number),
+    },
+        {
+      field: "cobrado",
+      headerName: "Cobrado",
+      width: 140,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => fmtCurrency(p as number),
+    },
+    {
+      field: "puntosGenerados",
+      headerName: "Cashback",
+      width: 120,
+      align: "center",
+      headerAlign: "center",
+      valueFormatter: (p) => Number(p as number).toFixed(2),
+    },
+    {
+      field: "creadoFecha",
+      headerName: "Fecha",
+      width: 150,
+      valueFormatter: (p) => fmtDate(p as string),
+    },
+    {
+      field: "esCustom",
+      headerName: "Especial",
+      width: 100,
+      align: "center",
+      headerAlign: "center",
+      sortable: true,
+      renderCell: (p) =>
+        isCustom(p.row.esCustom) ? (
+          <MuiTooltip title="Producto personalizado" arrow>
+            <AutoFixHighIcon sx={{ color: "#a78bfa" }} />
+          </MuiTooltip>
+        ) : null,
+    },
+    {
+      field: "editar",
+      headerName: "Editar",
+      width: 90,
+      sortable: false,
+      filterable: false,
+      align: "center",
+      headerAlign: "center",
+      renderCell: (p) => {
+        const custom = isCustom(p.row.esCustom);
+        return (
+          <MuiTooltip
+            title={custom ? "No editable (personalizado)" : "Editar venta"}
+            arrow
+          >
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => !custom && openEditModal(p.row)}
+                aria-label="Editar"
+                sx={{ color: "primary.main" }}
+                disabled={custom}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </MuiTooltip>
+        );
+      },
+    },
+    {
+      field: "eliminar",
+      headerName: "Eliminar",
+      width: 90,
+      sortable: false,
+      filterable: false,
+      align: "center",
+      headerAlign: "center",
+      renderCell: (p) => {
+        const custom = isCustom(p.row.esCustom);
+        return (
+          <MuiTooltip
+            title={
+              custom
+                ? "No se puede eliminar una venta personalizada"
+                : "Eliminar venta"
+            }
+            arrow
+          >
+            <span>
+              <IconButton
+                size="small"
+                onClick={() => !custom && onClickDeleteRow(p.row)}
+                aria-label="Eliminar"
+                sx={{ color: "error.main" }}
+                disabled={custom}
+              >
+                <DeleteIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </MuiTooltip>
+        );
+      },
+    },
+  ];
+
+  const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
@@ -990,7 +1092,6 @@ export default function DashboardPage() {
               <Button
                 variant="contained"
                 onClick={() => {
-                  // solo cuando se da click se recarga todo
                   setFilterToken((x) => x + 1);
                 }}
                 disabled={loading || loadingCustom}
@@ -1068,7 +1169,7 @@ export default function DashboardPage() {
                         Ventas por día
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Últimos resultados por fecha (máx. 7 días)
+                        Resultado por fecha (máx. 7 días)
                       </Typography>
                     </div>
                     <Stack direction="row" spacing={1}>
@@ -1233,7 +1334,7 @@ export default function DashboardPage() {
                         Ventas de promociones personalizadas
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        Cada color representa una promoción personalizada
+                        Promociones personalizadas
                         (máx. 7 días, Top 10)
                       </Typography>
                     </div>
@@ -1387,7 +1488,6 @@ export default function DashboardPage() {
 
         {/* ========= Tabla ========= */}
         <Paper sx={{ p: 2.5, borderRadius: 3 }}>
-          {/* Título como en "Promociones del negocio" */}
           <Typography
             variant="h6"
             fontWeight={800}
@@ -1399,7 +1499,6 @@ export default function DashboardPage() {
 
           <Divider sx={{ mb: 2 }} />
 
-          {/* Buscador + acciones debajo de la línea */}
           <Stack
             direction={{ xs: "column", md: "row" }}
             spacing={2}
@@ -1412,7 +1511,7 @@ export default function DashboardPage() {
                 setSearch(e.target.value);
                 setPaginationModel((m) => ({ ...m, page: 0 }));
               }}
-              placeholder="Buscar por folio, artículo, descripción, monto, puntos o cobrado…"
+              placeholder="Buscar por folio, artículo, descripción, teléfono, monto, cashback o cobrado…"
               size="small"
               fullWidth
               InputProps={
@@ -1569,8 +1668,8 @@ export default function DashboardPage() {
             color="text.secondary"
             sx={{ mt: 1, display: "block" }}
           >
-            Solo se modificarán Artículo, Descripción, Monto y Cantidad. Los
-            puntos y el total cobrado se recalculan automáticamente.
+            Solo se modificarán Artículo, Descripción, Monto y Cantidad. El
+            cashback y el total cobrado se recalculan automáticamente.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
@@ -1592,6 +1691,54 @@ export default function DashboardPage() {
             }
           >
             {editSaving ? "Guardando…" : "Guardar cambios"}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ===== Dialog: confirmar eliminación ===== */}
+      <Dialog
+        open={confirmDeleteOpen}
+        onClose={handleCancelConfirmDelete}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Eliminar venta</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            ¿Estás seguro de eliminar esta venta?
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            Recuerda que el cashback de este cliente se perderán.
+          </Typography>
+          {deleteRow && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: 1, display: "block" }}
+            >
+              Folio: {deleteRow.folio} · Artículo: {deleteRow.articulo}
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
+          <Button
+            variant="outlined"
+            color="warning"
+            onClick={handleCancelConfirmDelete}
+            disabled={deleting}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={
+              deleting ? <CircularProgress size={16} /> : <DeleteIcon />
+            }
+            onClick={handleDeleteVenta}
+            disabled={deleting}
+          >
+            {deleting ? "Eliminando…" : "Eliminar venta"}
           </Button>
         </DialogActions>
       </Dialog>

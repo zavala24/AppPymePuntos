@@ -20,6 +20,7 @@ export interface VentaRowDto {
   cobrado: number;
   esCustom: boolean;
   telefonoCliente: string;
+  cantidad: number;
 }
 
 export interface SerieDiaDto {
