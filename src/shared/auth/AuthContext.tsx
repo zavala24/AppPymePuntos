@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { setAuthToken, clearAuthToken } from "@/infrastructure/http/api";
+import { setAuthToken, clearAuthToken, setOnUnauthorizedHandler } from "@/infrastructure/http/api";
 import { AuthService } from "@/application/services/AuthService";
 import { AuthRepository } from "@/infrastructure/repositories/AuthRepository";
 
@@ -27,7 +27,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Cargar sesión almacenada (solo una vez)
+  // 🔵 Limpieza de sesión global
+  const logout = () => {
+    clearAuthToken();
+
+    localStorage.removeItem("pa_token");
+    localStorage.removeItem("pa_user");
+    localStorage.removeItem("pa_role");
+
+    setToken(null);
+    setUserName(null);
+    setRole(null);
+    setIsAuthenticated(false);
+  };
+
+  // 🔵 Registrar handler para manejar 401 automáticamente
+  useEffect(() => {
+    setOnUnauthorizedHandler(() => {
+      logout(); // cerrar sesión
+    });
+  }, []);
+
+  // 🔵 Cargar sesión almacenada
   useEffect(() => {
     const storedToken = localStorage.getItem("pa_token");
     const storedUser = localStorage.getItem("pa_user");
@@ -38,12 +59,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(storedToken);
       setIsAuthenticated(true);
     }
+
     if (storedUser) setUserName(storedUser);
     if (storedRole) setRole(storedRole);
 
     setLoading(false);
   }, []);
 
+  // 🔵 Login
   const login = async ({ userOrEmail, password }: { userOrEmail: string; password: string }) => {
     try {
       setError(null);
@@ -53,7 +76,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const t = res.data.token;
         const u = res.data.user ?? "";
         const r = res.data.role ?? "";
-        const n = res.data.idNegocio ?? "";
 
         localStorage.setItem("pa_token", t);
         localStorage.setItem("pa_user", u);
@@ -64,6 +86,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUserName(u);
         setRole(r);
         setIsAuthenticated(true);
+
         return true;
       }
 
@@ -75,20 +98,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const logout = () => {
-    clearAuthToken();
-    localStorage.removeItem("pa_token");
-    localStorage.removeItem("pa_user");
-    localStorage.removeItem("pa_role");
-    setToken(null);
-    setUserName(null);
-    setRole(null);
-    setIsAuthenticated(false);
-  };
-
   return (
     <AuthContext.Provider
-      value={{ isAuthenticated, token, userName, role, error, loading, login, logout }}
+      value={{
+        isAuthenticated,
+        token,
+        userName,
+        role,
+        error,
+        loading,
+        login,
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>
