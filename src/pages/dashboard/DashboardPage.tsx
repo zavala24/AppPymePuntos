@@ -1306,7 +1306,7 @@ export default function DashboardPage() {
                           <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                           <YAxis />
                           <Tooltip
-                            formatter={(v: any) => [Number(v).toFixed(2)]}
+                            formatter={(value, name) => [value, "Cantidad"]}
                           />
                           <Bar dataKey="qty" radius={[6, 6, 0, 0]}>
                             {topArticulos.map((entry, i) => (
