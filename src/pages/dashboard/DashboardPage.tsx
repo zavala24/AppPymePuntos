@@ -1471,7 +1471,7 @@ export default function DashboardPage() {
                           <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                           <YAxis />
                           <Tooltip />
-                          <Bar dataKey="qty" radius={[6, 6, 0, 0]}>
+                          <Bar dataKey="qty" name="Cantidad" radius={[6, 6, 0, 0]}>
                             {promoTopSeries.map((entry, i) => (
                               <Cell key={i} fill={entry.color} />
                             ))}
