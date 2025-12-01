@@ -14,6 +14,8 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import ImageIcon from "@mui/icons-material/Image";
@@ -84,6 +86,10 @@ type GridRow = {
 
 /* ===================== componente ===================== */
 export default function NotificacionesPage() {
+  const theme = useTheme();
+  // Detectar móvil
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   const idUsuario = getIdUsuarioActual();
   const usuarioNombre = getUsuarioNombre();
   const negocioLogo = getNegocioLogo();
@@ -212,6 +218,7 @@ export default function NotificacionesPage() {
     {
       field: "title",
       headerName: "Título",
+      minWidth: 150,
       flex: 1,
       renderCell: (p) => (
         <Chip size="small" color="primary" label={String(p.value)} sx={{ fontWeight: 600 }} />
@@ -220,6 +227,7 @@ export default function NotificacionesPage() {
     {
       field: "body",
       headerName: "Cuerpo",
+      minWidth: 200,
       flex: 2,
       renderCell: (p) => (
         <Typography
@@ -251,35 +259,38 @@ export default function NotificacionesPage() {
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
   return (
-    <Box className="space-y-4">
-      {/* Header + chip admin */}
-      <Paper className="p-6 border border-blue-100 rounded-2xl shadow-sm">
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <div>
-            <Typography variant="h5" fontWeight={800} color="primary">
-              Enviar notificaciones
-            </Typography>
-            <Typography color="text.secondary" fontSize={14}>
-              Redacta y envía promociones a los seguidores del negocio.
-            </Typography>
-          </div>
+    <Box className="mx-auto w-full max-w-[1800px] px-2 md:px-6 py-4">
+      
+      {/* Header Responsivo */}
+      <Stack 
+        direction={{ xs: 'column', sm: 'row' }} 
+        alignItems={{ xs: 'flex-start', sm: 'center' }} 
+        justifyContent="space-between" 
+        gap={1}
+        sx={{ mb: 2 }}
+      >
+        <Box>
+          <Typography variant="h4" fontWeight={800} color="primary" sx={{ fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
+            Notificaciones
+          </Typography>
+          <Typography color="text.secondary" fontSize={14}>
+            Envía promociones a tus seguidores.
+          </Typography>
+        </Box>
+        <Chip
+          icon={<ShieldIcon />}
+          label="Solo ADMIN"
+          color="secondary"
+          variant="outlined"
+          size={isMobile ? "small" : "medium"}
+        />
+      </Stack>
 
-          {/* 👇 Reemplazo: Chip "Solo ADMIN" (como en tus otras pantallas) */}
-          <Chip
-            icon={<ShieldIcon />}
-            label="Solo ADMIN"
-            color="secondary"
-            variant="outlined"
-          />
-        </Stack>
-
-        {/* Más aire entre el header/divider y las tarjetas */}
-        <Divider sx={{ mt: 2, mb: 3 }} />
-
-        {/* Form + Preview (más espacio) */}
-        <Stack direction={{ xs: "column", md: "row" }} spacing={3} sx={{ mt: 1 }}>
+      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, mb: 3, border: '1px solid #e0e7ff' }}>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
+          
           {/* Formulario */}
-          <Paper className="p-4 flex-1 border border-blue-100 rounded-xl">
+          <Box sx={{ flex: 1 }}>
             <Stack spacing={2}>
               <TextField
                 label={`Título (${title.length}/${TITLE_MAX})`}
@@ -304,7 +315,14 @@ export default function NotificacionesPage() {
                 placeholder="https://..."
                 fullWidth
               />
-              <Stack direction="row" spacing={1}>
+              <Stack direction="row" spacing={1} justifyContent={{ xs: 'flex-end', md: 'flex-start' }}>
+                <Button
+                  variant="text"
+                  onClick={resetForm}
+                  color="inherit"
+                >
+                  Limpiar
+                </Button>
                 <Button
                   startIcon={<SendIcon />}
                   variant="contained"
@@ -313,40 +331,45 @@ export default function NotificacionesPage() {
                 >
                   {sending ? "Enviando…" : "Enviar"}
                 </Button>
-                <Button variant="text" onClick={resetForm}>
-                  Limpiar
-                </Button>
               </Stack>
             </Stack>
-          </Paper>
+          </Box>
+
+          {/* Divider solo visual en desktop */}
+          <Divider orientation="vertical" flexItem sx={{ display: { xs: 'none', md: 'block' } }} />
+          <Divider sx={{ display: { xs: 'block', md: 'none' } }} />
 
           {/* Preview */}
-          <Paper className="p-4 w-full md:w-96 border border-blue-100 rounded-xl">
+          <Box sx={{ width: { xs: '100%', md: 350 }, display: 'flex', flexDirection: 'column' }}>
             <Typography fontWeight={700} color="text.secondary" fontSize={13} mb={1}>
-              Previsualización
+              VISTA PREVIA EN MÓVIL
             </Typography>
 
             <Paper
-              className="p-4 rounded-xl border"
-              sx={{
-                borderColor: "primary.100",
-                background:
-                  "linear-gradient(135deg, rgba(239,246,255,1) 0%, rgba(219,234,254,1) 100%)",
-              }}
               variant="outlined"
+              sx={{
+                p: 2,
+                borderRadius: 3,
+                borderColor: "primary.100",
+                background: "linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)",
+                width: '100%',
+                maxWidth: 350,
+                alignSelf: 'center'
+              }}
             >
               <Stack direction="row" spacing={1} alignItems="center">
-                <Avatar src={negocioLogo ?? undefined} alt="" sx={{ width: 28, height: 28 }} />
-                <Typography color="text.secondary" fontSize={12}>
-                  ahora
-                </Typography>
+                <Avatar src={negocioLogo ?? undefined} alt="" sx={{ width: 32, height: 32 }} />
+                <Box>
+                    <Typography variant="subtitle2" fontWeight="bold" fontSize={13}>PyMe Fiel App</Typography>
+                    <Typography color="text.secondary" fontSize={11}>ahora</Typography>
+                </Box>
               </Stack>
 
-              <Typography mt={2} fontWeight={800} color="primary">
+              <Typography mt={1.5} fontWeight={800} color="#1e3a8a" fontSize={15}>
                 {title || "Título de la promoción"}
               </Typography>
-              <Typography mt={0.5} color="text.secondary">
-                {body || "Escribe aquí el detalle de la promoción."}
+              <Typography mt={0.5} color="text.secondary" fontSize={13} sx={{ lineHeight: 1.4 }}>
+                {body || "Aquí aparecerá el detalle de tu promoción tal como lo verán los clientes."}
               </Typography>
 
               {imageUrl ? (
@@ -354,82 +377,64 @@ export default function NotificacionesPage() {
                   <img
                     src={imageUrl}
                     alt="imagen"
-                    style={{ width: "100%", display: "block", borderRadius: 12 }}
+                    style={{ width: "100%", display: "block", borderRadius: 8 }}
                     onError={(e) => {
                       (e.currentTarget as HTMLImageElement).src =
-                        "https://placehold.co/600x320?text=Imagen+no+disponible";
+                        "https://placehold.co/600x320?text=Error+imagen";
                     }}
                   />
                 </Box>
               ) : (
                 <Box
                   mt={2}
-                  height={140}
+                  height={120}
                   display="flex"
                   alignItems="center"
                   justifyContent="center"
-                  bgcolor="primary.50"
+                  bgcolor="rgba(255,255,255,0.6)"
                   borderRadius={2}
                   border="1px dashed"
-                  borderColor="primary.100"
+                  borderColor="primary.main"
                   color="primary.main"
                 >
-                  <Stack alignItems="center" spacing={1}>
-                    <ImageIcon />
-                    <Typography fontSize={12}>Sin imagen</Typography>
+                  <Stack alignItems="center" spacing={0.5}>
+                    <ImageIcon fontSize="small" />
+                    <Typography fontSize={11}>Sin imagen</Typography>
                   </Stack>
                 </Box>
               )}
             </Paper>
-          </Paper>
+          </Box>
         </Stack>
       </Paper>
 
       {/* GRID */}
-      <Paper className="p-6 border border-blue-100 rounded-2xl shadow-sm">
-        <Typography variant="h6" fontWeight={800} color="primary" sx={{ mb: 1 }}>
-          Enviadas
-        </Typography>
-        <Divider sx={{ mb: 2 }} />
-
-        {/* Buscador + Refresh (solo grid) */}
-        <Stack
-          direction="row"
-          alignItems="center"
-          justifyContent="space-between"
-          sx={{ mb: 3, maxWidth: { xs: "100%", md: 720 } }}
-        >
-          <TextField
-            value={query}
-            onChange={(e) => {
-              setQuery(e.target.value);
-              setPaginationModel((m) => ({ ...m, page: 0 }));
-            }}
-            placeholder="Buscar título o contenido…"
-            size="small"
-            fullWidth
-            sx={{
-              "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
-              "& .MuiOutlinedInput-input": { lineHeight: "44px" },
-            }}
-          />
-          <Tooltip title="Refrescar" arrow>
-            <IconButton
-              onClick={loadNotificaciones}
-              disabled={loading}
-              sx={{
-                ml: 1,
-                color: "primary.main",
-                backgroundColor: "transparent",
-                "&:hover": { backgroundColor: "transparent", color: "primary.dark" },
-              }}
-            >
+      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, width: '100%', overflow: 'hidden' }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Typography variant="h6" fontWeight={800} color="primary">
+            Historial
+          </Typography>
+          <Tooltip title="Refrescar">
+            <IconButton onClick={loadNotificaciones} disabled={loading} color="primary">
               <RefreshIcon />
             </IconButton>
           </Tooltip>
         </Stack>
+        <Divider sx={{ mb: 2 }} />
 
-        <Box sx={{ height: dynamicHeight, width: "100%" }}>
+        <TextField
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPaginationModel((m) => ({ ...m, page: 0 }));
+          }}
+          placeholder="Buscar..."
+          size="small"
+          fullWidth
+          sx={{ mb: 3, maxWidth: { xs: "100%", md: 400 } }}
+        />
+
+        <Box sx={{ height: dynamicHeight, width: "100%", overflowX: 'auto' }}>
           <DataGrid
             rows={filtered}
             columns={columns}
@@ -439,13 +444,21 @@ export default function NotificacionesPage() {
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[5, 10, 20, 50]}
+            // Ocultar Fecha en móvil
+            initialState={{
+              columns: {
+                columnVisibilityModel: {
+                  createdAt: !isMobile,
+                },
+              },
+            }}
             sx={{
-              borderRadius: 3,
+              minWidth: isMobile ? 600 : '100%',
               "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
               "& .MuiDataGrid-row:nth-of-type(even)": { backgroundColor: "#ffffff" },
               "& .MuiDataGrid-row:nth-of-type(odd)": { backgroundColor: "rgba(14,165,233,0.06)" },
               "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.12) !important" },
-              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
+              "& .MuiDataGrid-cell:focus": { outline: "none" },
             }}
           />
         </Box>

@@ -1,4 +1,3 @@
-// src/pages/configuracion/usuarios/ConfigUsuariosAdminPage.tsx
 import * as React from "react";
 import {
   Box,
@@ -16,6 +15,9 @@ import {
   Autocomplete,
   CircularProgress,
   IconButton,
+  Tooltip, // <--- AGREGADO AQUÍ
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
@@ -62,6 +64,9 @@ function isEmail(v: string) {
 }
 
 export default function ConfigUsuariosAdminPage() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   // ---------- Form ----------
   const [editingId, setEditingId] = React.useState<number | null>(null);
   const isEditing = editingId != null && editingId > 0;
@@ -79,7 +84,6 @@ export default function ConfigUsuariosAdminPage() {
     passwordNueva: "",
   });
 
-  // touched/errores
   const [touched, setTouched] = React.useState<Record<string, boolean>>({});
   const markTouched = (k: string) => setTouched((t) => ({ ...t, [k]: true }));
   const resetTouched = () => setTouched({});
@@ -207,7 +211,6 @@ export default function ConfigUsuariosAdminPage() {
   const invalidEmail = !isEmail(form.email);
 
   const onGuardar = async () => {
-    // mostrar errores si faltan
     setTouched({
       nombre: true,
       apellidoPaterno: true,
@@ -243,7 +246,6 @@ export default function ConfigUsuariosAdminPage() {
       idNegocio: form.negocio!.id,
       isAdmin: form.isAdmin,
       activo: form.activo,
-      // si está en edición y capturaron algo, se envía; si no, null para no cambiarla
       passwordNueva: isEditing && form.passwordNueva.trim() ? form.passwordNueva.trim() : null,
     };
 
@@ -252,10 +254,9 @@ export default function ConfigUsuariosAdminPage() {
       const resp = await userService.createOrUpdateAdmin(dto);
       if (resp.status === 200 || resp.status === 201) {
         showToast(
-          resp.message || (isEditing ? "Usuario y contraseña actualizados correctamente." : "Usuario creado."),
+          resp.message || (isEditing ? "Usuario actualizado." : "Usuario creado."),
           "success"
         );
-        // mantener edición, limpiar password y quitar rojos
         setForm((f) => ({ ...f, passwordNueva: "" }));
         resetTouched();
         setPaginationModel((m) => ({ ...m, page: 0 }));
@@ -270,7 +271,6 @@ export default function ConfigUsuariosAdminPage() {
     }
   };
 
-  // Click fila => editar
   const onRowClick = (p: any) => {
     const r = p.row as UserRow;
     setEditingId(r.id);
@@ -290,19 +290,18 @@ export default function ConfigUsuariosAdminPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // Columnas grid
   const columns: GridColDef<UserRow>[] = [
-    { field: "usuarioLogin", headerName: "Usuario", flex: 0.8 },
-    { field: "nombre", headerName: "Nombre", flex: 1 },
-    { field: "apellidoPaterno", headerName: "Apellido paterno", flex: 1 },
-    { field: "apellidoMaterno", headerName: "Apellido materno", flex: 1 },
-    { field: "email", headerName: "Email", flex: 1 },
-    { field: "telefono", headerName: "Teléfono", flex: 0.8 },
-    { field: "negocio", headerName: "Negocio", flex: 1 },
+    { field: "usuarioLogin", headerName: "Usuario", minWidth: 120, flex: 0.8 },
+    { field: "nombre", headerName: "Nombre", minWidth: 150, flex: 1 },
+    { field: "apellidoPaterno", headerName: "Apellido P.", minWidth: 150, flex: 1 },
+    { field: "apellidoMaterno", headerName: "Apellido M.", minWidth: 150, flex: 1 },
+    { field: "email", headerName: "Email", minWidth: 200, flex: 1 },
+    { field: "telefono", headerName: "Teléfono", minWidth: 130, flex: 0.8 },
+    { field: "negocio", headerName: "Negocio", minWidth: 150, flex: 1 },
     {
       field: "isAdmin",
       headerName: "Admin",
-      width: 100,
+      width: 90,
       align: "center",
       headerAlign: "center",
       renderCell: (p) =>
@@ -311,7 +310,7 @@ export default function ConfigUsuariosAdminPage() {
     {
       field: "activo",
       headerName: "Activo",
-      width: 100,
+      width: 90,
       align: "center",
       headerAlign: "center",
       renderCell: (p) =>
@@ -321,135 +320,134 @@ export default function ConfigUsuariosAdminPage() {
 
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
-  // Sólo dígitos en teléfono
   const onTelefonoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const digits = e.target.value.replace(/\D+/g, "");
     setForm((f) => ({ ...f, telefono: digits }));
   };
 
   return (
-    <Box className="mx-auto w-full max-w-[1800px] px-4 md:px-6 py-4">
-      {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography variant="h4" color="primary">Usuarios administrativos</Typography>
-        <Chip icon={<ShieldIcon />} label="Solo SUPER ADMIN" color="secondary" variant="outlined" />
+    <Box className="mx-auto w-full max-w-[1800px] px-2 md:px-6 py-4">
+      <Stack 
+        direction={{ xs: 'column', sm: 'row' }} 
+        alignItems={{ xs: 'flex-start', sm: 'center' }} 
+        justifyContent="space-between" 
+        gap={1}
+        sx={{ mb: 2 }}
+      >
+        <Typography variant="h4" color="primary" sx={{ fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
+          Usuarios Admin
+        </Typography>
+        <Chip icon={<ShieldIcon />} label="Solo SUPER ADMIN" color="secondary" variant="outlined" size={isMobile ? "small" : "medium"} />
       </Stack>
 
-      {/* Formulario */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, mb: 3 }}>
         <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 1 }}>
           {isEditing ? "Editar usuario" : "Nuevo usuario"}
         </Typography>
 
-        {/* Fila 1: Nombre | Apellido paterno */}
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField
-            fullWidth required label="Nombre" value={form.nombre}
-            onBlur={() => markTouched("nombre")}
-            error={touched.nombre && form.nombre.trim() === ""}
-            helperText={touched.nombre && form.nombre.trim() === "" ? "Obligatorio" : ""}
-            onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
-          />
-          <TextField
-            fullWidth required label="Apellido paterno" value={form.apellidoPaterno}
-            onBlur={() => markTouched("apellidoPaterno")}
-            error={touched.apellidoPaterno && form.apellidoPaterno.trim() === ""}
-            helperText={touched.apellidoPaterno && form.apellidoPaterno.trim() === "" ? "Obligatorio" : ""}
-            onChange={(e) => setForm((f) => ({ ...f, apellidoPaterno: e.target.value }))}
-          />
-        </Stack>
-
-        {/* Fila 2: Apellido materno | Email */}
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField
-            fullWidth label="Apellido materno" value={form.apellidoMaterno}
-            onChange={(e) => setForm((f) => ({ ...f, apellidoMaterno: e.target.value }))}
-          />
-          <TextField
-            fullWidth label="Email" type="email" value={form.email}
-            onBlur={() => markTouched("email")}
-            error={touched.email && !isEmail(form.email)}
-            helperText={touched.email && !isEmail(form.email) ? "Correo inválido" : ""}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          />
-        </Stack>
-
-        {/* Fila 3: Teléfono | Usuario (login) */}
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField
-            fullWidth required label="Teléfono" value={form.telefono}
-            onBlur={() => markTouched("telefono")}
-            error={touched.telefono && form.telefono.trim() === ""}
-            helperText={touched.telefono && form.telefono.trim() === "" ? "Obligatorio" : ""}
-            inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
-            onChange={onTelefonoChange}
-          />
-          <TextField
-            fullWidth required label="Usuario (login)" value={form.usuarioLogin}
-            onBlur={() => markTouched("usuarioLogin")}
-            error={touched.usuarioLogin && form.usuarioLogin.trim() === ""}
-            helperText={touched.usuarioLogin && form.usuarioLogin.trim() === "" ? "Obligatorio" : ""}
-            onChange={(e) => setForm((f) => ({ ...f, usuarioLogin: e.target.value }))}
-          />
-        </Stack>
-
-        {/* Fila 4: Negocio (col izq = Teléfono) | Nueva contraseña + switches (col der = Usuario) */}
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 1 }}>
-          {/* IZQ: Negocio */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Autocomplete<NegOption, false, false, false>
-              options={negOptions}
-              loading={negLoading}
-              value={form.negocio}
-              onChange={(_, v) => {
-                setForm((f) => ({ ...f, negocio: v }));
-                markTouched("negocio");
-              }}
-              inputValue={negQuery}
-              onInputChange={(_, v) => setNegQuery(v)}
-              getOptionLabel={(o) => o?.nombre ?? ""}
-              isOptionEqualToValue={(opt, val) => opt.id === val.id}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  fullWidth
-                  label="Negocio"
-                  required
-                  onBlur={() => markTouched("negocio")}
-                  error={touched.negocio && !form.negocio}
-                  helperText={touched.negocio && !form.negocio ? "Selecciona un negocio" : ""}
-                  placeholder="Buscar negocio..."
-                  InputProps={{
-                    ...params.InputProps,
-                    endAdornment: (
-                      <>
-                        {negLoading ? <CircularProgress size={18} /> : null}
-                        {params.InputProps.endAdornment}
-                      </>
-                    ),
-                  }}
-                />
-              )}
-            />
-          </Box>
-
-          {/* DER: Nueva contraseña (misma anchura que Usuario) */}
-          <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Stack gap={2} sx={{ mb: 2 }}>
+          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
             <TextField
-              fullWidth
-              label="Nueva contraseña (solo edición)"
-              value={form.passwordNueva}
-              onChange={(e) => setForm((f) => ({ ...f, passwordNueva: e.target.value }))}
-              disabled={!isEditing}
+              fullWidth required label="Nombre" value={form.nombre}
+              onBlur={() => markTouched("nombre")}
+              error={touched.nombre && form.nombre.trim() === ""}
+              helperText={touched.nombre && form.nombre.trim() === "" ? "Obligatorio" : ""}
+              onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
             />
-            {/* leyenda fuera del TextField para no alterar la altura del control */}
-            <Typography variant="caption" color="text.secondary">
-              {isEditing ? "Se actualiza solo si capturas una nueva." : "Se habilita al editar"}
-            </Typography>
-          </Box>
+            <TextField
+              fullWidth required label="Apellido paterno" value={form.apellidoPaterno}
+              onBlur={() => markTouched("apellidoPaterno")}
+              error={touched.apellidoPaterno && form.apellidoPaterno.trim() === ""}
+              helperText={touched.apellidoPaterno && form.apellidoPaterno.trim() === "" ? "Obligatorio" : ""}
+              onChange={(e) => setForm((f) => ({ ...f, apellidoPaterno: e.target.value }))}
+            />
+          </Stack>
+
+          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
+            <TextField
+              fullWidth label="Apellido materno" value={form.apellidoMaterno}
+              onChange={(e) => setForm((f) => ({ ...f, apellidoMaterno: e.target.value }))}
+            />
+            <TextField
+              fullWidth label="Email" type="email" value={form.email}
+              onBlur={() => markTouched("email")}
+              error={touched.email && !isEmail(form.email)}
+              helperText={touched.email && !isEmail(form.email) ? "Correo inválido" : ""}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            />
+          </Stack>
+
+          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
+            <TextField
+              fullWidth required label="Teléfono" value={form.telefono}
+              onBlur={() => markTouched("telefono")}
+              error={touched.telefono && form.telefono.trim() === ""}
+              helperText={touched.telefono && form.telefono.trim() === "" ? "Obligatorio" : ""}
+              inputProps={{ inputMode: "numeric", pattern: "[0-9]*" }}
+              onChange={onTelefonoChange}
+            />
+            <TextField
+              fullWidth required label="Usuario (login)" value={form.usuarioLogin}
+              onBlur={() => markTouched("usuarioLogin")}
+              error={touched.usuarioLogin && form.usuarioLogin.trim() === ""}
+              helperText={touched.usuarioLogin && form.usuarioLogin.trim() === "" ? "Obligatorio" : ""}
+              onChange={(e) => setForm((f) => ({ ...f, usuarioLogin: e.target.value }))}
+            />
+          </Stack>
+
+          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <Autocomplete<NegOption, false, false, false>
+                options={negOptions}
+                loading={negLoading}
+                value={form.negocio}
+                onChange={(_, v) => {
+                  setForm((f) => ({ ...f, negocio: v }));
+                  markTouched("negocio");
+                }}
+                inputValue={negQuery}
+                onInputChange={(_, v) => setNegQuery(v)}
+                getOptionLabel={(o) => o?.nombre ?? ""}
+                isOptionEqualToValue={(opt, val) => opt.id === val.id}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    fullWidth
+                    label="Negocio"
+                    required
+                    onBlur={() => markTouched("negocio")}
+                    error={touched.negocio && !form.negocio}
+                    helperText={touched.negocio && !form.negocio ? "Selecciona un negocio" : ""}
+                    placeholder="Buscar negocio..."
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {negLoading ? <CircularProgress size={18} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
+            </Box>
+
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              <TextField
+                fullWidth
+                label="Nueva contraseña (solo edición)"
+                value={form.passwordNueva}
+                onChange={(e) => setForm((f) => ({ ...f, passwordNueva: e.target.value }))}
+                disabled={!isEditing}
+              />
+              <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                {isEditing ? "Se actualiza solo si escribes algo." : "Solo editable al modificar."}
+              </Typography>
+            </Box>
+          </Stack>
         </Stack>
 
-        {/* Switches debajo, sin afectar la fila de arriba */}
         <Stack direction="row" alignItems="center" gap={2} sx={{ mb: 2 }}>
           <FormControlLabel
             control={
@@ -458,7 +456,7 @@ export default function ConfigUsuariosAdminPage() {
                 onChange={(e) => setForm((f) => ({ ...f, isAdmin: e.target.checked }))}
               />
             }
-            label="Admin"
+            label="Es Administrador"
           />
           <FormControlLabel
             control={<Switch checked={form.activo} onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))} />}
@@ -470,7 +468,7 @@ export default function ConfigUsuariosAdminPage() {
           <Button startIcon={<AddIcon />} variant="outlined" color="primary" onClick={onNuevo}>Nuevo</Button>
           {isEditing && (
             <Button startIcon={<CancelIcon />} variant="outlined" color="warning" onClick={onCancelarEdicion}>
-              Cancelar edición
+              Cancelar
             </Button>
           )}
           <Button startIcon={<SaveIcon />} variant="contained" color="success" onClick={onGuardar} disabled={saving}>
@@ -479,13 +477,15 @@ export default function ConfigUsuariosAdminPage() {
         </Stack>
       </Paper>
 
-      {/* GRID */}
-      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
+      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, width: '100%', overflow: 'hidden' }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-          <Typography variant="h6" fontWeight={700} color="primary">Usuarios administrativos</Typography>
-          <IconButton aria-label="Refrescar" onClick={() => loadPage()} sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}>
-            <RefreshIcon />
-          </IconButton>
+          <Typography variant="h6" fontWeight={700} color="primary">Usuarios registrados</Typography>
+          
+          <Tooltip title="Refrescar">
+            <IconButton aria-label="Refrescar" onClick={() => loadPage()} sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}>
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
         </Stack>
         <Divider sx={{ mb: 2 }} />
 
@@ -497,13 +497,12 @@ export default function ConfigUsuariosAdminPage() {
           fullWidth
           sx={{
             mb: 3,
-            maxWidth: { xs: "100%", md: 720 },
-            "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
-            "& .MuiOutlinedInput-input": { lineHeight: "44px" },
+            maxWidth: { xs: "100%", md: 400 },
+            "& .MuiOutlinedInput-root": { borderRadius: 20 },
           }}
         />
 
-        <Box sx={{ height: dynamicHeight, width: "100%" }}>
+        <Box sx={{ height: dynamicHeight, width: "100%", overflowX: 'auto' }}>
           <DataGrid
             rows={rows}
             columns={columns}
@@ -517,19 +516,28 @@ export default function ConfigUsuariosAdminPage() {
             onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[5, 10, 20, 50]}
             getRowClassName={(p) => (p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd")}
+            initialState={{
+              columns: {
+                columnVisibilityModel: {
+                  apellidoPaterno: !isMobile,
+                  apellidoMaterno: !isMobile,
+                  email: !isMobile,
+                  telefono: !isMobile,
+                },
+              },
+            }}
             sx={{
-              borderRadius: 3,
+              minWidth: isMobile ? 800 : '100%',
               "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
               "& .row-even": { backgroundColor: "#ffffff" },
               "& .row-odd": { backgroundColor: "rgba(14,165,233,0.06)" },
               "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.12) !important" },
-              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
+              "& .MuiDataGrid-cell:focus": { outline: "none" },
             }}
           />
         </Box>
       </Paper>
 
-      {/* TOASTS */}
       <Snackbar open={toastOpen} autoHideDuration={3500} onClose={() => setToastOpen(false)} anchorOrigin={{ vertical: "top", horizontal: "right" }}>
         <Alert onClose={() => setToastOpen(false)} severity={toastSeverity} variant="filled" sx={{ width: "100%" }}>
           {toastMsg}

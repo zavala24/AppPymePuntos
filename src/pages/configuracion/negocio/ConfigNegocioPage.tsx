@@ -13,6 +13,8 @@ import {
   Autocomplete,
   CircularProgress,
   IconButton,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import {
   DataGrid,
@@ -53,6 +55,10 @@ type Row = {
 };
 
 export default function ConfigNegocioPage() {
+  // Hook para detectar móvil
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   // ---------- Toast ----------
   const [toastOpen, setToastOpen] = React.useState(false);
   const [toastMsg, setToastMsg] = React.useState("");
@@ -233,11 +239,12 @@ export default function ConfigNegocioPage() {
 
   // ---------- Columnas ----------
   const columns: GridColDef<Row>[] = [
-    { field: "nombreNegocio", headerName: "Nombre negocio", flex: 1.2 },
+    { field: "nombreNegocio", headerName: "Nombre negocio", minWidth: 180, flex: 1.2 },
     {
       field: "porcentaje",
-      headerName: "Porcentaje venta %",
-      width: 180,
+      headerName: "Porcentaje %",
+      minWidth: 120, // Ancho fijo mínimo
+      flex: 0.8,
       type: "number",
       align: "center",
       headerAlign: "center",
@@ -250,11 +257,12 @@ export default function ConfigNegocioPage() {
     {
       field: "logoUrl",
       headerName: "URL Logo",
+      minWidth: 200, 
       flex: 1.2,
       renderCell: (p) =>
         p.value ? (
-          <a href={String(p.value)} target="_blank" rel="noreferrer" style={{ color: "#1976d2" }}>
-            {String(p.value)}
+          <a href={String(p.value)} target="_blank" rel="noreferrer" style={{ color: "#1976d2", textDecoration: 'underline' }}>
+            Ver logo
           </a>
         ) : (
           <span style={{ color: "#94a3b8" }}>—</span>
@@ -270,10 +278,20 @@ export default function ConfigNegocioPage() {
   );
 
   return (
-    <Box className="mx-auto w-full max-w-[1800px] px-4 md:px-6 py-4">
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography variant="h4" color="primary">Configuración de negocio</Typography>
-        <Chip icon={<ShieldIcon />} label="Solo SUPER ADMIN" color="secondary" variant="outlined" />
+    <Box className="mx-auto w-full max-w-[1800px] px-2 md:px-6 py-4">
+      
+      {/* Header Responsivo */}
+      <Stack 
+        direction={{ xs: 'column', sm: 'row' }} 
+        alignItems={{ xs: 'flex-start', sm: 'center' }} 
+        justifyContent="space-between" 
+        gap={1}
+        sx={{ mb: 2 }}
+      >
+        <Typography variant="h4" color="primary" sx={{ fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
+          Configuración
+        </Typography>
+        <Chip icon={<ShieldIcon />} label="Solo SUPER ADMIN" color="secondary" variant="outlined" size={isMobile ? "small" : "medium"} />
       </Stack>
 
       {/* === FORM === */}
@@ -286,6 +304,7 @@ export default function ConfigNegocioPage() {
           <Box
             sx={{
               display: "grid",
+              // En móvil: 1 columna. En PC: Grid complejo
               gridTemplateColumns: { xs: "1fr", md: "1fr 0.45fr 220px" },
               gridTemplateRows: { xs: "auto", md: "auto auto" },
               columnGap: 2,
@@ -329,7 +348,7 @@ export default function ConfigNegocioPage() {
             <Box>
               <TextField
                 fullWidth
-                label="Porcentaje de ventas (%) *"
+                label="Porcentaje (%) *"
                 placeholder="Ej. 0.01"
                 inputMode="decimal"
                 value={form.porcentajeVentas}
@@ -341,7 +360,7 @@ export default function ConfigNegocioPage() {
               />
             </Box>
 
-            {/* URL Logo */}
+            {/* URL Logo - Ocupa ancho completo en móvil */}
             <Box sx={{ gridColumn: { xs: "1 / -1", md: "1 / 3" } }}>
               <TextField
                 fullWidth
@@ -353,7 +372,7 @@ export default function ConfigNegocioPage() {
               />
             </Box>
 
-            {/* Preview logo */}
+            {/* Preview logo - Ajustado para móvil */}
             <Box
               sx={{
                 gridColumn: { xs: "1 / -1", md: "3 / 4" },
@@ -361,11 +380,13 @@ export default function ConfigNegocioPage() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                height: { xs: 160, md: "100%" },
-                width: { xs: "100%", md: 220 },
+                height: { xs: 120, md: "100%" }, // Menos alto en móvil
+                width: "100%",
                 position: "relative",
                 overflow: "hidden",
                 bgcolor: "transparent",
+                border: { xs: '1px dashed #e2e8f0', md: 'none' }, // Borde guía en móvil
+                borderRadius: 2
               }}
             >
               {previewUrl ? (
@@ -378,8 +399,7 @@ export default function ConfigNegocioPage() {
                     top: "50%",
                     left: "50%",
                     transform: "translate(-50%, -50%)",
-                    width: "100%",
-                    height: "auto",
+                    maxWidth: "100%",
                     maxHeight: "100%",
                     objectFit: "contain",
                     display: "block",
@@ -406,7 +426,7 @@ export default function ConfigNegocioPage() {
                 color="warning"
                 onClick={onCancelarEdicion}
               >
-                Cancelar edición
+                Cancelar
               </Button>
             )}
 
@@ -417,30 +437,23 @@ export default function ConfigNegocioPage() {
               type="submit"
               disabled={!canSave || saving}
             >
-              {saving
-                ? isEditing
-                  ? "Actualizando..."
-                  : "Guardando..."
-                : isEditing
-                ? "Actualizar"
-                : "Guardar"}
+              {saving ? (isEditing ? "Actualizando..." : "Guardando...") : (isEditing ? "Actualizar" : "Guardar")}
             </Button>
           </Stack>
         </Box>
       </Paper>
 
-      {/* === GRID === */}
-      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
+      {/* === GRID RESPONSIVO === */}
+      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, width: '100%', overflow: 'hidden' }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
           <Typography variant="h6" fontWeight={700} color="primary">
-            Configuraciones de negocios
+            Listado
           </Typography>
           <MuiTooltip title="Refrescar">
             <IconButton
               size="small"
               onClick={() => loadConfigs()}
               sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}
-              aria-label="Refrescar"
             >
               <RefreshIcon />
             </IconButton>
@@ -455,13 +468,14 @@ export default function ConfigNegocioPage() {
             setSearch(e.target.value);
             setPaginationModel((m) => ({ ...m, page: 0 }));
           }}
-          placeholder="Buscar por nombre de negocio..."
+          placeholder="Buscar negocio..."
           size="small"
           fullWidth
           sx={{ mb: 3, maxWidth: { xs: "100%", md: 720 } }}
         />
 
-        <Box sx={{ height: dynamicHeight, width: "100%" }}>
+        {/* Contenedor con Scroll Horizontal */}
+        <Box sx={{ height: dynamicHeight, width: "100%", overflowX: 'auto' }}>
           <DataGrid
             rows={rows}
             columns={columns}
@@ -474,13 +488,17 @@ export default function ConfigNegocioPage() {
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[5, 10, 20, 50]}
-            // Locale español (incluye "Filas por página")
-            // Zebra + estilos
-            getRowClassName={(p) =>
-              p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd"
-            }
+            getRowClassName={(p) => (p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd")}
+            // Ocultar columna Logo en móvil
+            initialState={{
+              columns: {
+                columnVisibilityModel: {
+                  logoUrl: !isMobile,
+                },
+              },
+            }}
             sx={{
-              borderRadius: 3,
+              minWidth: isMobile ? 500 : '100%', // Ancho mínimo para forzar scroll si es necesario
               "& .MuiDataGrid-columnHeaders": {
                 backgroundColor: "action.hover",
                 fontWeight: 700,
@@ -491,9 +509,6 @@ export default function ConfigNegocioPage() {
                 backgroundColor: "rgba(14,165,233,0.12) !important",
               },
               "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
-                outline: "none",
-              },
-              "& .MuiDataGrid-columnHeader:focus, & .MuiDataGrid-columnHeader:focus-within": {
                 outline: "none",
               },
             }}

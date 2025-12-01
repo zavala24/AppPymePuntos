@@ -19,6 +19,8 @@ import {
   Tooltip,
   IconButton,
   MenuItem,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
@@ -29,6 +31,7 @@ import CheckIcon from "@mui/icons-material/CheckCircle";
 import RemoveIcon from "@mui/icons-material/RemoveCircleOutline";
 import LoyaltyIcon from "@mui/icons-material/Loyalty";
 import RefreshIcon from "@mui/icons-material/Refresh";
+import ShieldIcon from "@mui/icons-material/Security";
 
 import { ProductosCustomRepository } from "@/infrastructure/repositories/ProductosCustomRepository";
 import { ProductosCustomService } from "@/application/services/ProductosCustomService";
@@ -70,6 +73,10 @@ function toNumberSafe(v: string, fallback = 0) {
 }
 
 export default function CustomProductsPage() {
+  const theme = useTheme();
+  // Detectar móvil
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   // grid
   const [rows, setRows] = React.useState<Row[]>([]);
   const [loading, setLoading] = React.useState(false);
@@ -99,9 +106,7 @@ export default function CustomProductsPage() {
     [form.porcentajePorCompra]
   );
 
-  // ahora siempre trabajamos con "Compra" como tipo de acumulación
   const pctRequired = true;
-
   const metaValid = Number.isFinite(metaNum) && metaNum > 0;
   const pctValid =
     !pctRequired || (Number.isFinite(pctNum) && pctNum > 0 && pctNum <= 100);
@@ -112,9 +117,7 @@ export default function CustomProductsPage() {
   // toast
   const [toastOpen, setToastOpen] = React.useState(false);
   const [toastMsg, setToastMsg] = React.useState("");
-  const [toastSeverity, setToastSeverity] = React.useState<"success" | "error">(
-    "success"
-  );
+  const [toastSeverity, setToastSeverity] = React.useState<"success" | "error">("success");
   const showToast = (m: string, s: "success" | "error") => {
     setToastMsg(m);
     setToastSeverity(s);
@@ -146,6 +149,7 @@ export default function CustomProductsPage() {
       setLoading(false);
     }
   }, []);
+  
   React.useEffect(() => {
     load();
   }, [load]);
@@ -189,7 +193,6 @@ export default function CustomProductsPage() {
       porcentajePorCompra: pctRequired
         ? toNumberSafe(form.porcentajePorCompra, 0)
         : 0,
-      // tipoAcumulacion: mantenemos el valor del form (por defecto "Compra")
       tipoAcumulacion: form.tipoAcumulacion || "Compra",
       recompensa: form.recompensa.trim() || null,
       estado: form.estado,
@@ -244,26 +247,30 @@ export default function CustomProductsPage() {
     }
   };
 
+  // Columnas Responsivas
   const columns: GridColDef<Row>[] = [
-    { field: "nombreProducto", headerName: "Producto", flex: 1.2 },
-    { field: "descripcion", headerName: "Descripción", flex: 1.4 },
+    { field: "nombreProducto", headerName: "Producto", minWidth: 150, flex: 1.2 },
+    // Ocultar Descripción en móvil
+    { field: "descripcion", headerName: "Descripción", minWidth: 200, flex: 1.4 },
     {
       field: "meta",
-      headerName: "Meta (compras)",
-      width: 140,
+      headerName: "Meta",
+      width: 100,
       align: "center",
       headerAlign: "center",
     },
     {
       field: "porcentajePorCompra",
-      headerName: "% por compra",
-      width: 140,
+      headerName: "% x compra",
+      width: 110,
       align: "center",
       headerAlign: "center",
       valueFormatter: (p) => `${p}%`,
     },
+    // Ocultar Tipo en móvil
     { field: "tipoAcumulacion", headerName: "Tipo", width: 120 },
-    { field: "recompensa", headerName: "Recompensa", flex: 1.0 },
+    
+    { field: "recompensa", headerName: "Recompensa", minWidth: 150, flex: 1.0 },
     {
       field: "estado",
       headerName: "Activo",
@@ -284,35 +291,37 @@ export default function CustomProductsPage() {
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
   return (
-    <Box className="mx-auto w-full max-w-[1800px] px-4 md:px-6 py-4">
-      {/* Header */}
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
+    <Box className="mx-auto w-full max-w-[1800px] px-2 md:px-6 py-4">
+      {/* Header Responsivo */}
+      <Stack 
+        direction={{ xs: 'column', sm: 'row' }} 
+        alignItems={{ xs: 'flex-start', sm: 'center' }} 
+        justifyContent="space-between" 
+        gap={1}
         sx={{ mb: 2 }}
       >
-        <Typography variant="h4" color="primary">
+        <Typography variant="h4" color="primary" sx={{ fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
           Promociones
         </Typography>
         <Chip
-          icon={<LoyaltyIcon />}
+          icon={<ShieldIcon />}
           label="Solo ADMIN"
           color="secondary"
           variant="outlined"
+          size={isMobile ? "small" : "medium"}
         />
       </Stack>
 
       {/* Formulario */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, mb: 3 }}>
-        <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }} color="primary">
           {isEditing ? "Editar promoción" : "Nueva promoción"}
         </Typography>
 
         <Box
           sx={{
             display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, // 1 col móvil, 2 col PC
             columnGap: 2,
             rowGap: 2,
           }}
@@ -325,7 +334,6 @@ export default function CustomProductsPage() {
             }
             required
           />
-          {/* Tipo de acumulación ahora es solo texto, sin dropdown */}
           <TextField
             label="Tipo de acumulación"
             value={form.tipoAcumulacion || "Compra"}
@@ -383,7 +391,7 @@ export default function CustomProductsPage() {
         </Box>
 
         <FormControlLabel
-          sx={{ mt: 1 }}
+          sx={{ mt: 2 }}
           control={
             <Switch
               checked={form.estado}
@@ -406,7 +414,7 @@ export default function CustomProductsPage() {
               color="warning"
               onClick={clearForm}
             >
-              Cancelar edición
+              Cancelar
             </Button>
           )}
           {isEditing && (
@@ -431,53 +439,31 @@ export default function CustomProductsPage() {
         </Stack>
       </Paper>
 
-      {/* GRID */}
-      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
-        <Typography
-          variant="h6"
-          fontWeight={700}
-          color="primary"
-          sx={{ mb: 1 }}
-        >
-          Promociones del negocio
-        </Typography>
-        <Divider sx={{ mb: 2 }} />
-
-        {/* Buscador + refresh */}
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={1.5}
-          sx={{ mb: 3, maxWidth: { xs: "100%", md: 720 } }}
-        >
-          <TextField
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, tipo, recompensa..."
-            size="small"
-            fullWidth
-            sx={{
-              "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
-              "& .MuiOutlinedInput-input": { lineHeight: "44px" },
-            }}
-          />
-          <Tooltip title="Refrescar" arrow>
-            <IconButton
-              color="primary"
-              onClick={() => load()}
-              disabled={loading}
-              sx={{
-                "&:hover": { backgroundColor: "primary.light", color: "#fff" },
-              }}
-            >
+      {/* Grid */}
+      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, width: '100%', overflow: 'hidden' }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Typography variant="h6" fontWeight={700} color="primary">
+            Promociones del negocio
+          </Typography>
+          
+          <Tooltip title="Refrescar">
+            <IconButton onClick={() => load()} disabled={loading} color="primary">
               <RefreshIcon />
             </IconButton>
           </Tooltip>
         </Stack>
+        <Divider sx={{ mb: 2 }} />
 
-        <Box
-          sx={{ height: dynamicHeight, width: "100%" }}
-        >
+        <TextField
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar..."
+          size="small"
+          fullWidth
+          sx={{ mb: 3, maxWidth: { xs: "100%", md: 400 } }}
+        />
+
+        <Box sx={{ height: dynamicHeight, width: "100%", overflowX: 'auto' }}>
           <DataGrid
             rows={rows.filter((r) => {
               const q = search.trim().toLowerCase();
@@ -502,8 +488,16 @@ export default function CustomProductsPage() {
             getRowClassName={(p) =>
               p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd"
             }
+            initialState={{
+              columns: {
+                columnVisibilityModel: {
+                  descripcion: !isMobile,
+                  tipoAcumulacion: !isMobile,
+                },
+              },
+            }}
             sx={{
-              borderRadius: 3,
+              minWidth: isMobile ? 800 : '100%',
               "& .MuiDataGrid-columnHeaders": {
                 backgroundColor: "action.hover",
                 fontWeight: 700,
@@ -513,9 +507,7 @@ export default function CustomProductsPage() {
               "& .MuiDataGrid-row:hover": {
                 backgroundColor: "rgba(14,165,233,0.12) !important",
               },
-              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
-                outline: "none",
-              },
+              "& .MuiDataGrid-cell:focus": { outline: "none" },
             }}
           />
         </Box>

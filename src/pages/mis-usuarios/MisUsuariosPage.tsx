@@ -19,6 +19,8 @@ import {
   DialogActions,
   Tooltip,
   IconButton,
+  useTheme,
+  useMediaQuery,
 } from "@mui/material";
 import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
@@ -28,13 +30,14 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import ShieldIcon from "@mui/icons-material/Security";
 import CheckIcon from "@mui/icons-material/CheckCircle";
 import RemoveIcon from "@mui/icons-material/RemoveCircleOutline";
+import RefreshIcon from "@mui/icons-material/Refresh";
 
 import { UserRepository } from "@/infrastructure/repositories/UserRepository";
 import { UserService } from "@/application/services/UserService";
 import type { IUserService } from "@/application/services/IUserService";
 import { UsuarioPorNegocioDto } from "@/application/dtos/usuario/UsuarioPorNegocioDto";
 import { UpsertUsuarioDeNegocioDto } from "@/application/dtos/usuario/UpsertUsuarioDeNegocioDto";
-import RefreshIcon from "@mui/icons-material/Refresh";
+
 // ---------- helpers ----------
 const userService: IUserService = new UserService(new UserRepository());
 
@@ -92,6 +95,10 @@ type FormState = {
 };
 
 export default function MisUsuariosPage() {
+  const theme = useTheme();
+  // Detectar móvil
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   // ------- estado base -------
   const [idNegocio, setIdNegocio] = React.useState<number | null>(null);
 
@@ -269,16 +276,18 @@ export default function MisUsuariosPage() {
 
   // ------- columnas -------
   const columns: GridColDef<Row>[] = [
-    { field: "usuarioNombre", headerName: "Usuario", flex: 0.9 },
-    { field: "nombre", headerName: "Nombre", flex: 1.0 },
-    { field: "apellidoPaterno", headerName: "Apellido paterno", flex: 0.9 },
-    { field: "apellidoMaterno", headerName: "Apellido materno", flex: 0.9 },
-    { field: "email", headerName: "Email", flex: 1.2 },
-    { field: "telefono", headerName: "Teléfono", width: 140 },
+    { field: "usuarioNombre", headerName: "Usuario", minWidth: 120, flex: 0.9 },
+    { field: "nombre", headerName: "Nombre", minWidth: 120, flex: 1.0 },
+    // Ocultar apellidos y email en móvil
+    { field: "apellidoPaterno", headerName: "Apellido P.", minWidth: 120, flex: 0.9 },
+    { field: "apellidoMaterno", headerName: "Apellido M.", minWidth: 120, flex: 0.9 },
+    { field: "email", headerName: "Email", minWidth: 180, flex: 1.2 },
+    
+    { field: "telefono", headerName: "Teléfono", minWidth: 120 },
     {
       field: "fechaRegistro",
       headerName: "Registro",
-      width: 130,
+      minWidth: 110,
       valueGetter: (p) => formatDateDDMMYYYY(p),
     },
     {
@@ -294,28 +303,34 @@ export default function MisUsuariosPage() {
     },
   ];
 
-  // altura dinámica
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
   return (
-    <Box className="mx-auto w-full max-w-[1800px] px-4 md:px-6 py-4">
-      {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography variant="h4" color="primary">
+    <Box className="mx-auto w-full max-w-[1800px] px-2 md:px-6 py-4">
+      {/* Header Responsivo */}
+      <Stack 
+        direction={{ xs: 'column', sm: 'row' }} 
+        alignItems={{ xs: 'flex-start', sm: 'center' }} 
+        justifyContent="space-between" 
+        gap={1}
+        sx={{ mb: 2 }}
+      >
+        <Typography variant="h4" color="primary" sx={{ fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
           Mis usuarios
         </Typography>
-        <Chip icon={<ShieldIcon />} label="Solo ADMIN" color="secondary" variant="outlined" />
+        <Chip icon={<ShieldIcon />} label="Solo ADMIN" color="secondary" variant="outlined" size={isMobile ? "small" : "medium"} />
       </Stack>
 
       {/* Formulario */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, mb: 3 }}>
-        <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }}>
+        <Typography variant="h6" fontWeight={700} sx={{ mb: 2 }} color="primary">
           {isEditing ? "Editar usuario" : "Nuevo usuario"}
         </Typography>
 
         <Box
           sx={{
             display: "grid",
+            // Layout de 2 columnas en PC, 1 en Móvil
             gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
             columnGap: 2,
             rowGap: 2,
@@ -350,7 +365,6 @@ export default function MisUsuariosPage() {
             label="Email (opcional)"
             value={form.email}
             onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-            onBlur={() => setForm((f) => ({ ...f, email: f.email.trim().toLowerCase() }))}
             error={!emailValid}
             helperText={!emailValid ? "Email inválido" : "Opcional"}
           />
@@ -372,12 +386,12 @@ export default function MisUsuariosPage() {
             value={form.password}
             onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
             type="password"
-            sx={{ gridColumn: "1 / -1" }}
+            sx={{ gridColumn: { xs: "1", md: "1 / -1" } }} // En PC ocupa todo el ancho
           />
         </Box>
 
         <FormControlLabel
-          sx={{ mt: 1 }}
+          sx={{ mt: 2 }}
           control={
             <Switch
               checked={form.activo}
@@ -419,45 +433,31 @@ export default function MisUsuariosPage() {
       </Paper>
 
       {/* GRID */}
-      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
-        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 1 }}>
-          Usuarios del negocio
-        </Typography>
-        <Divider sx={{ mb: 2 }} />
-
-        {/* 🔹 Buscador + botón Refrescar */}
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={1.5}
-          sx={{ mb: 3, maxWidth: { xs: "100%", md: 720 } }}
-        >
-          <TextField
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por nombre, usuario, email..."
-            size="small"
-            fullWidth
-            sx={{
-              "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
-              "& .MuiOutlinedInput-input": { lineHeight: "44px" },
-            }}
-          />
-          <Tooltip title="Refrescar" arrow>
-            <IconButton
-              color="primary"
-              onClick={() => load()}
-              disabled={loading}
-              sx={{
-                "&:hover": { backgroundColor: "primary.light", color: "#fff" },
-              }}
-            >
+      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, width: '100%', overflow: 'hidden' }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Typography variant="h6" fontWeight={700} color="primary">
+            Mis Usuarios
+          </Typography>
+          <Tooltip title="Refrescar">
+            <IconButton onClick={() => load()} color="primary">
               <RefreshIcon />
             </IconButton>
           </Tooltip>
         </Stack>
+        <Divider sx={{ mb: 2 }} />
 
-        <Box sx={{ height: dynamicHeight, width: "100%" }}>
+        {/* Buscador */}
+        <TextField
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar..."
+          size="small"
+          fullWidth
+          sx={{ mb: 3, maxWidth: { xs: "100%", md: 400 } }}
+        />
+
+        {/* Contenedor Scroll Horizontal */}
+        <Box sx={{ height: dynamicHeight, width: "100%", overflowX: 'auto' }}>
           <DataGrid
             rows={rows.filter((r) => {
               const q = search.trim().toLowerCase();
@@ -480,28 +480,31 @@ export default function MisUsuariosPage() {
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[5, 10, 20, 50]}
-            getRowClassName={(p) =>
-              p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd"
-            }
-            sx={{
-              borderRadius: 3,
-              "& .MuiDataGrid-columnHeaders": {
-                backgroundColor: "action.hover",
-                fontWeight: 700,
+            getRowClassName={(p) => (p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd")}
+            // Ocultar columnas en móvil
+            initialState={{
+              columns: {
+                columnVisibilityModel: {
+                  apellidoPaterno: !isMobile,
+                  apellidoMaterno: !isMobile,
+                  email: !isMobile,
+                  fechaRegistro: !isMobile,
+                },
               },
+            }}
+            sx={{
+              minWidth: isMobile ? 800 : '100%',
+              "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
               "& .row-even": { backgroundColor: "#ffffff" },
               "& .row-odd": { backgroundColor: "rgba(14,165,233,0.06)" },
-              "& .MuiDataGrid-row:hover": {
-                backgroundColor: "rgba(14,165,233,0.12) !important",
-              },
-              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": {
-                outline: "none",
-              },
+              "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.12) !important" },
+              "& .MuiDataGrid-cell:focus": { outline: "none" },
             }}
           />
         </Box>
       </Paper>
-      {/* DIALOG ELIMINAR */}
+
+      {/* DIALOGO ELIMINAR */}
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Eliminar usuario</DialogTitle>
         <DialogContent>
