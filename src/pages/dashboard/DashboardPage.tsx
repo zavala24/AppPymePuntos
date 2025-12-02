@@ -1,11 +1,9 @@
-// src/pages/dashboard/DashboardPage.tsx
 import * as React from "react";
 import {
   Box,
   Stack,
   Paper,
   Typography,
-  Divider,
   IconButton,
   Button,
   CircularProgress,
@@ -18,6 +16,11 @@ import {
   DialogActions,
   Snackbar,
   Alert,
+  useTheme,
+  useMediaQuery,
+  Divider,
+  Grid,
+  Chip,
 } from "@mui/material";
 import MuiTooltip from "@mui/material/Tooltip";
 import Autocomplete from "@mui/material/Autocomplete";
@@ -35,6 +38,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
 import CancelIcon from "@mui/icons-material/Cancel";
 import DeleteIcon from "@mui/icons-material/Delete";
+import ShieldIcon from "@mui/icons-material/Security";
 
 import {
   BarChart,
@@ -49,7 +53,7 @@ import {
 } from "recharts";
 import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
 
-// Date pickers (MUI X) + dayjs
+// Date pickers
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -115,7 +119,6 @@ function fmtCurrency(n: number) {
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN" });
 }
 
-// Para la columna de fecha del grid (fecha + hora:minuto)
 function fmtDate(iso: string) {
   const d = new Date(iso);
   return d.toLocaleString("es-MX", {
@@ -128,7 +131,6 @@ function fmtDate(iso: string) {
   });
 }
 
-// Para ejes X de gráficas (12-nov-2025)
 function fmtDateAxis(value: string) {
   const d = dayjs(value);
   if (!d.isValid()) return value;
@@ -158,52 +160,40 @@ const SOFT_COLORS = [
 /* ============ Tipos auxiliares ============ */
 type NegocioOption = { id: number; nombre: string };
 
-// Normaliza truthy para esCustom (boolean/string/num)
 const isCustom = (v: any) =>
   v === true || v === 1 || String(v).toLowerCase() === "true";
 
 /* ============ Componente principal ============ */
 export default function DashboardPage() {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  
   const usuarioNombre = localStorage.getItem("pa_user") || "";
   const role = (localStorage.getItem("pa_role") || "").toLowerCase();
   const isSuperAdmin = role === "superadmin";
 
-  // Filtros con DatePicker (Dayjs)
-  const [desde, setDesde] = React.useState<Dayjs | null>(
-    dayjs().startOf("day")
-  );
-  const [hasta, setHasta] = React.useState<Dayjs | null>(
-    dayjs().endOf("day")
-  );
+  const [desde, setDesde] = React.useState<Dayjs | null>(dayjs().startOf("day"));
+  const [hasta, setHasta] = React.useState<Dayjs | null>(dayjs().endOf("day"));
 
-  // SUPERADMIN: dropdown de negocios
   const [negocios, setNegocios] = React.useState<NegocioOption[]>([]);
   const [loadingNegocios, setLoadingNegocios] = React.useState(false);
   const [negocioId, setNegocioId] = React.useState<number | "">("");
 
-  // pestañas SOLO para gráficas
   const [chartsTab, setChartsTab] = React.useState<0 | 1>(0);
-
-  // token para aplicar filtros manualmente (solo recarga al dar click en "Filtrar")
   const [filterToken, setFilterToken] = React.useState(1);
 
-  // Datos normales
   const [data, setData] = React.useState<DashboardVentasResponse | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Datos personalizadas
-  const [customData, setCustomData] =
-    React.useState<DashboardVentasCustomResponse | null>(null);
+  const [customData, setCustomData] = React.useState<DashboardVentasCustomResponse | null>(null);
   const [loadingCustom, setLoadingCustom] = React.useState(false);
   const [errorCustom, setErrorCustom] = React.useState<string | null>(null);
 
-  // Grid: paginación, búsqueda y loading local (solo filas)
-  const [paginationModel, setPaginationModel] =
-    React.useState<GridPaginationModel>({
-      page: 0,
-      pageSize: 5,
-    });
+  const [paginationModel, setPaginationModel] = React.useState<GridPaginationModel>({
+    page: 0,
+    pageSize: 5,
+  });
   const [loadingRows, setLoadingRows] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [debouncedSearch, setDebouncedSearch] = React.useState("");
@@ -213,12 +203,10 @@ export default function DashboardPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  // Refs para capturar las gráficas
   const ventasDiaRef = React.useRef<HTMLDivElement>(null);
   const topArtRef = React.useRef<HTMLDivElement>(null);
   const promoChartRef = React.useRef<HTMLDivElement>(null);
 
-  // ======= MODAL DE EDICIÓN =======
   const [editOpen, setEditOpen] = React.useState(false);
   const [editSaving, setEditSaving] = React.useState(false);
   const [editError, setEditError] = React.useState<string | null>(null);
@@ -227,7 +215,7 @@ export default function DashboardPage() {
     folio: number;
     articulo: string;
     descripcion: string;
-    monto: string; // string para facilitar validación
+    monto: string; 
     cantidad: string;
   };
 
@@ -239,20 +227,15 @@ export default function DashboardPage() {
     cantidad: "",
   });
 
-  // Snapshot para poder revertir al cancelar
-  const [editInitialForm, setEditInitialForm] =
-    React.useState<EditForm | null>(null);
+  const [editInitialForm, setEditInitialForm] = React.useState<EditForm | null>(null);
 
-  // ===== Eliminar venta =====
   const [deleteRow, setDeleteRow] = React.useState<VentaRowDto | null>(null);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
 
-  // ===== Toasts =====
   const [toastOpen, setToastOpen] = React.useState(false);
   const [toastMsg, setToastMsg] = React.useState("");
-  const [toastSeverity, setToastSeverity] =
-    React.useState<"success" | "error">("success");
+  const [toastSeverity, setToastSeverity] = React.useState<"success" | "error">("success");
 
   const showToast = (m: string, s: "success" | "error") => {
     setToastMsg(m);
@@ -260,7 +243,6 @@ export default function DashboardPage() {
     setToastOpen(true);
   };
 
-  // ===== Export grid =====
   const [exportingGrid, setExportingGrid] = React.useState(false);
 
   const openEditModal = (row: VentaRowDto) => {
@@ -282,16 +264,11 @@ export default function DashboardPage() {
     setEditOpen(false);
   };
 
-  const onEditChange =
-    (key: "articulo" | "descripcion" | "monto" | "cantidad") =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onEditChange = (key: "articulo" | "descripcion" | "monto" | "cantidad") => (e: React.ChangeEvent<HTMLInputElement>) => {
       setEditForm((f) => ({ ...f, [key]: e.target.value }));
     };
 
-  // === Sólo números con hasta 2 decimales (coma se normaliza a punto)
-  const onNumericChange =
-    (key: "monto" | "cantidad") =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+  const onNumericChange = (key: "monto" | "cantidad") => (e: React.ChangeEvent<HTMLInputElement>) => {
       let v = e.target.value.replace(",", ".");
       v = v.replace(/[^\d.]/g, "");
       const firstDot = v.indexOf(".");
@@ -307,8 +284,7 @@ export default function DashboardPage() {
     };
 
   const commitEdit = async () => {
-    const idNegocio =
-      typeof negocioId === "number" ? negocioId : getIdNegocioActual() ?? 0;
+    const idNegocio = typeof negocioId === "number" ? negocioId : getIdNegocioActual() ?? 0;
 
     if (!editForm.articulo.trim()) {
       setEditError("El artículo es obligatorio.");
@@ -327,15 +303,11 @@ export default function DashboardPage() {
     const cantidad = Number(editForm.cantidad.replace(",", "."));
 
     if (!(Number.isFinite(monto) && monto > 0)) {
-      setEditError(
-        "El monto debe ser un número mayor a 0 y con máximo 2 decimales."
-      );
+      setEditError("El monto debe ser un número mayor a 0 y con máximo 2 decimales.");
       return;
     }
     if (!(Number.isFinite(cantidad) && cantidad > 0)) {
-      setEditError(
-        "La cantidad debe ser un número mayor a 0 y con máximo 2 decimales."
-      );
+      setEditError("La cantidad debe ser un número mayor a 0 y con máximo 2 decimales.");
       return;
     }
 
@@ -371,14 +343,12 @@ export default function DashboardPage() {
     }
   };
 
-  // Cancelar: revierte y cierra
   const onCancelarEdicion = () => {
     if (editSaving) return;
     if (editInitialForm) setEditForm(editInitialForm);
     setEditOpen(false);
   };
 
-  // Cargar negocios (solo superadmin)
   React.useEffect(() => {
     if (!isSuperAdmin) return;
     (async () => {
@@ -400,17 +370,11 @@ export default function DashboardPage() {
     })();
   }, [isSuperAdmin]);
 
-  // Cargar dashboard normal (KPIs, charts, grid completo)
   const loadDashboard = async (overrideIdNegocio?: number | "") => {
     setLoading(true);
     setError(null);
     try {
-      const selectedIdNegocio =
-        typeof overrideIdNegocio === "number"
-          ? overrideIdNegocio
-          : typeof negocioId === "number"
-          ? negocioId
-          : getIdNegocioActual();
+      const selectedIdNegocio = typeof overrideIdNegocio === "number" ? overrideIdNegocio : typeof negocioId === "number" ? negocioId : getIdNegocioActual();
 
       const req: DashboardVentasRequest = {
         usuarioNombre,
@@ -422,8 +386,7 @@ export default function DashboardPage() {
         idNegocio: selectedIdNegocio ?? 0,
       };
 
-      const res: ServiceResponse<DashboardVentasResponse> =
-        await sellService.getVentasDashboard(req);
+      const res: ServiceResponse<DashboardVentasResponse> = await sellService.getVentasDashboard(req);
 
       if (res.status === 200 && res.data) setData(res.data);
       else setError(res.message || "Error al obtener las ventas");
@@ -434,17 +397,11 @@ export default function DashboardPage() {
     }
   };
 
-  // Cargar dashboard de promociones
   const loadCustomDashboard = async (overrideIdNegocio?: number | "") => {
     setLoadingCustom(true);
     setErrorCustom(null);
     try {
-      const selectedIdNegocio =
-        typeof overrideIdNegocio === "number"
-          ? overrideIdNegocio
-          : typeof negocioId === "number"
-          ? negocioId
-          : getIdNegocioActual();
+      const selectedIdNegocio = typeof overrideIdNegocio === "number" ? overrideIdNegocio : typeof negocioId === "number" ? negocioId : getIdNegocioActual();
 
       const req: DashboardVentasCustomRequest = {
         idNegocio: selectedIdNegocio ?? 0,
@@ -454,10 +411,7 @@ export default function DashboardPage() {
 
       const res = await sellService.getVentasCustomDashboard(req);
       if (res.status === 200 && res.data) setCustomData(res.data);
-      else
-        setErrorCustom(
-          res.message || "Error al obtener las ventas personalizadas"
-        );
+      else setErrorCustom(res.message || "Error al obtener las ventas personalizadas");
     } catch (err: any) {
       setErrorCustom(err.message ?? "Error inesperado al cargar promociones");
     } finally {
@@ -465,12 +419,10 @@ export default function DashboardPage() {
     }
   };
 
-  // Refrescar SOLO las filas del grid, manteniendo KPIs y gráficas
   const refreshGridRowsOnly = React.useCallback(async () => {
     try {
       setLoadingRows(true);
-      const selectedIdNegocio =
-        typeof negocioId === "number" ? negocioId : getIdNegocioActual();
+      const selectedIdNegocio = typeof negocioId === "number" ? negocioId : getIdNegocioActual();
 
       const req: DashboardVentasRequest = {
         usuarioNombre,
@@ -482,8 +434,7 @@ export default function DashboardPage() {
         idNegocio: selectedIdNegocio ?? 0,
       };
 
-      const res: ServiceResponse<DashboardVentasResponse> =
-        await sellService.getVentasDashboard(req);
+      const res: ServiceResponse<DashboardVentasResponse> = await sellService.getVentasDashboard(req);
 
       if (res.status === 200 && res.data) {
         setData((prev) => (prev ? { ...prev, rows: res.data.rows } : res.data));
@@ -493,20 +444,15 @@ export default function DashboardPage() {
     }
   }, [usuarioNombre, desde, hasta, debouncedSearch, negocioId]);
 
-  // Cargar al iniciar y cuando cambia el "filterToken"
   React.useEffect(() => {
     loadDashboard();
     loadCustomDashboard();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterToken]);
 
-  // 🔎 Nuevo: cuando cambia el texto buscado, refrescamos las filas desde la API
   React.useEffect(() => {
-    // si ya se digitó algo (o se limpió), recargamos las filas
     refreshGridRowsOnly();
   }, [debouncedSearch, refreshGridRowsOnly]);
 
-  // KPIs
   const kpis = React.useMemo(() => {
     if (!data) return [];
     return [
@@ -533,26 +479,20 @@ export default function DashboardPage() {
     ];
   }, [data]);
 
-  // ==== Helper: limitar a máx. 7 días hacia atrás desde "hasta" ====
   const withinLast7Days = (iso: string) => {
     const d = dayjs(iso);
     if (!d.isValid()) return false;
 
-    const end = (hasta ?? dayjs()).endOf("day"); // fecha Hasta (fin del día)
-    const start = end.clone().startOf("day").subtract(6, "day"); // 7 días hacia atrás
+    const end = (hasta ?? dayjs()).endOf("day");
+    const start = end.clone().startOf("day").subtract(6, "day");
 
     const time = d.valueOf();
     return time >= start.valueOf() && time <= end.valueOf();
   };
 
-  // Series normales (ventas por día -> BARRAS)
   const ventasPorDia = React.useMemo(() => {
     const raw = data?.ventasPorDia ?? [];
-    const filtered =
-      raw.length === 0
-        ? []
-        : raw.filter((x) => withinLast7Days(String(x.dia)));
-
+    const filtered = raw.length === 0 ? [] : raw.filter((x) => withinLast7Days(String(x.dia)));
     return filtered.map((x, i) => ({
       dia: x.dia,
       ventas: x.ventas,
@@ -560,13 +500,9 @@ export default function DashboardPage() {
     }));
   }, [data, hasta]);
 
-  // Top artículos (Top 10)
   const topArticulos = React.useMemo(() => {
     if (!data) return [];
-    if (
-      data.topArticulos?.length &&
-      (data.topArticulos as any)[0]?.unidades !== undefined
-    ) {
+    if (data.topArticulos?.length && (data.topArticulos as any)[0]?.unidades !== undefined) {
       return data.topArticulos
         .map((x, i) => ({
           name: x.nombre,
@@ -594,8 +530,6 @@ export default function DashboardPage() {
       .slice(0, 10);
   }, [data]);
 
-  /* ================== EXPORT HELPERS ================== */
-  // Excel (genérico)
   const exportSheet = (
     sheets: { name: string; rows: any[] }[],
     fileName: string
@@ -608,7 +542,6 @@ export default function DashboardPage() {
     XLSX.writeFile(wb, fileName.endsWith(".xlsx") ? fileName : `${fileName}.xlsx`);
   };
 
-  // Excel: Ventas por día
   const onExportVentasDiaXlsx = () => {
     const rows = ventasPorDia.map((r) => ({
       Día: fmtDateAxis(String(r.dia)),
@@ -620,7 +553,6 @@ export default function DashboardPage() {
     );
   };
 
-  // Excel: Top artículos
   const onExportTopArtXlsx = () => {
     const rows = topArticulos.map((r) => ({
       Artículo: r.name,
@@ -632,7 +564,6 @@ export default function DashboardPage() {
     );
   };
 
-  // Excel: Grid de ventas filtrado
   const onExportGridXlsx = async () => {
     try {
       if (!data?.rows?.length) {
@@ -640,7 +571,6 @@ export default function DashboardPage() {
         return;
       }
       setExportingGrid(true);
-
       const rows = data.rows.map((r) => ({
         Folio: r.folio,
         Artículo: r.articulo,
@@ -690,37 +620,6 @@ export default function DashboardPage() {
     }
   };
 
-  // PNG (genérico)
-  const savePng = async (ref: React.RefObject<HTMLElement>, name: string) => {
-    if (!ref.current) return;
-    const dataUrl = await htmlToImage.toPng(ref.current, {
-      pixelRatio: 2,
-      backgroundColor: "#ffffff",
-    });
-    const link = document.createElement("a");
-    link.download = name.endsWith(".png") ? name : `${name}.png`;
-    link.href = dataUrl;
-    link.click();
-  };
-
-  // SVG
-  const saveSvg = (ref: React.RefObject<HTMLElement>, name: string) => {
-    if (!ref.current) return;
-    const svg = ref.current.querySelector("svg");
-    if (!svg) return;
-    const clone = svg.cloneNode(true) as SVGSVGElement;
-    clone.setAttribute("style", "background:#ffffff;");
-    const xml = new XMLSerializer().serializeToString(clone);
-    const blob = new Blob([xml], { type: "image/svg+xml;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.download = name.endsWith(".svg") ? name : `${name}.svg`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
-
-  // ===== Promociones: combinada por día (máx. 7 días, top 10 promos) =====
   const { promoCombinedData, promoTopSeries, promoProductNames } =
     React.useMemo(() => {
       const result = {
@@ -806,13 +705,10 @@ export default function DashboardPage() {
     );
   };
 
-  // ====== Eliminar venta: handlers (sin contraseña) ======
   const onClickDeleteRow = (row: VentaRowDto) => {
-    const custom = isCustom(row.esCustom);
-    if (custom) return;
-    setDeleteRow(row);
-    setConfirmDeleteOpen(true);
-  };
+      setDeleteRow(row);
+      setConfirmDeleteOpen(true);
+    };
 
   const handleCancelConfirmDelete = () => {
     if (deleting) return;
@@ -822,9 +718,7 @@ export default function DashboardPage() {
 
   const handleDeleteVenta = async () => {
     if (!deleteRow) return;
-
-    const idNegocio =
-      typeof negocioId === "number" ? negocioId : getIdNegocioActual() ?? 0;
+    const idNegocio = typeof negocioId === "number" ? negocioId : getIdNegocioActual() ?? 0;
 
     const dto: DeleteVentaFromRowDto = {
       folio: Number(deleteRow.folio),
@@ -843,16 +737,10 @@ export default function DashboardPage() {
         await refreshGridRowsOnly();
         showToast(data.message || "Venta eliminada con éxito.", "success");
       } else {
-        showToast(
-          data.message || "No se pudo eliminar la venta.",
-          "error"
-        );
+        showToast(data.message || "No se pudo eliminar la venta.", "error");
       }
     } catch (e: any) {
-      showToast(
-        e?.message ?? "Error de red al eliminar la venta.",
-        "error"
-      );
+      showToast(e?.message ?? "Error de red al eliminar la venta.", "error");
     } finally {
       setDeleting(false);
       setConfirmDeleteOpen(false);
@@ -860,33 +748,38 @@ export default function DashboardPage() {
     }
   };
 
-  // Columnas del grid (con columna de Eliminar)
   const columns: GridColDef<VentaRowDto>[] = [
-    { field: "folio", headerName: "Folio", width: 80 },
-    { field: "articulo", headerName: "Artículo", width: 140 },
-    { field: "descripcion", headerName: "Descripción", flex: 1, minWidth: 160 },
+    { field: "folio", headerName: "Folio", width: 80, align: "center", headerAlign: "center" },
+    { field: "articulo", headerName: "Artículo", minWidth: 120, flex: 1 },
+    { 
+      field: "descripcion", 
+      headerName: "Descripción", 
+      minWidth: 180, 
+      flex: 1.5,
+    },
     { field: "telefonoCliente", headerName: "Teléfono", width: 100 },
-    { field: "cantidad", headerName: "Cantidad", width: 80, align: "center",},
+    
+    { field: "cantidad", headerName: "Cant.", width: 70, align: "center", headerAlign: "center"},
     {
       field: "monto",
       headerName: "Monto",
-      width: 140,
-      align: "center",
-      headerAlign: "center",
+      width: 100,
+      align: "right",
+      headerAlign: "right",
       valueFormatter: (p) => fmtCurrency(p as number),
     },
-        {
+    {
       field: "cobrado",
       headerName: "Cobrado",
-      width: 140,
-      align: "center",
-      headerAlign: "center",
+      width: 100,
+      align: "right",
+      headerAlign: "right",
       valueFormatter: (p) => fmtCurrency(p as number),
     },
     {
       field: "puntosGenerados",
       headerName: "Cashback",
-      width: 120,
+      width: 90,
       align: "center",
       headerAlign: "center",
       valueFormatter: (p) => Number(p as number).toFixed(2),
@@ -895,56 +788,66 @@ export default function DashboardPage() {
       field: "creadoFecha",
       headerName: "Fecha",
       width: 150,
+      align: "center",
+      headerAlign: "center",
       valueFormatter: (p) => fmtDate(p as string),
     },
     {
       field: "esCustom",
-      headerName: "Especial",
-      width: 100,
+      headerName: "Esp.",
+      width: 60,
       align: "center",
       headerAlign: "center",
       sortable: true,
       renderCell: (p) =>
         isCustom(p.row.esCustom) ? (
           <MuiTooltip title="Producto personalizado" arrow>
-            <AutoFixHighIcon sx={{ color: "#a78bfa" }} />
+            <AutoFixHighIcon sx={{ color: "#a78bfa", fontSize: 20 }} />
           </MuiTooltip>
         ) : null,
     },
     {
       field: "editar",
       headerName: "Editar",
-      width: 90,
+      width: 70,
       sortable: false,
       filterable: false,
       align: "center",
       headerAlign: "center",
       renderCell: (p) => {
         const custom = isCustom(p.row.esCustom);
+        
+        // Si es custom, mostramos un icono deshabilitado
+        if (custom) {
+            return (
+                <MuiTooltip title="No editable (promoción)" arrow>
+                    <span>
+                        <IconButton size="small" disabled sx={{ opacity: 0.3 }}>
+                            <EditIcon fontSize="small" />
+                        </IconButton>
+                    </span>
+                </MuiTooltip>
+            );
+        }
+
         return (
-          <MuiTooltip
-            title={custom ? "No editable (personalizado)" : "Editar venta"}
-            arrow
-          >
-            <span>
-              <IconButton
-                size="small"
-                onClick={() => !custom && openEditModal(p.row)}
-                aria-label="Editar"
-                sx={{ color: "primary.main" }}
-                disabled={custom}
-              >
-                <EditIcon fontSize="small" />
-              </IconButton>
-            </span>
+          <MuiTooltip title="Editar venta" arrow>
+            <IconButton
+              size="small"
+              onClick={() => openEditModal(p.row)}
+              aria-label="Editar"
+              sx={{ color: "primary.main" }}
+            >
+              <EditIcon fontSize="small" />
+            </IconButton>
           </MuiTooltip>
         );
       },
     },
     {
       field: "eliminar",
-      headerName: "Eliminar",
-      width: 90,
+      headerName: "Borrar",
+      width: 70,
       sortable: false,
       filterable: false,
       align: "center",
@@ -953,24 +856,17 @@ export default function DashboardPage() {
         const custom = isCustom(p.row.esCustom);
         return (
           <MuiTooltip
-            title={
-              custom
-                ? "No se puede eliminar una venta personalizada"
-                : "Eliminar venta"
-            }
+            title={custom ? "Eliminar promoción" : "Eliminar venta"}
             arrow
           >
-            <span>
-              <IconButton
-                size="small"
-                onClick={() => !custom && onClickDeleteRow(p.row)}
-                aria-label="Eliminar"
-                sx={{ color: "error.main" }}
-                disabled={custom}
-              >
-                <DeleteIcon fontSize="small" />
-              </IconButton>
-            </span>
+            <IconButton
+              size="small"
+              onClick={() => onClickDeleteRow(p.row)}
+              aria-label="Eliminar"
+              sx={{ color: "error.main" }}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
           </MuiTooltip>
         );
       },
@@ -981,154 +877,132 @@ export default function DashboardPage() {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDayjs} adapterLocale="es">
-      <Box className="space-y-4">
-        {/* Header */}
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
-          <div>
-            <Typography variant="h5" fontWeight={800} color="primary">
+      <Box className="mx-auto w-full max-w-[1800px] px-2 md:px-6 py-4">
+        
+        {/* Header Responsivo */}
+          <Stack 
+            direction={{ xs: 'column', sm: 'row' }} 
+            alignItems={{ xs: 'flex-start', sm: 'center' }} 
+            justifyContent="space-between" 
+            gap={1}
+            sx={{ mb: 2 }}
+          >
+            <Typography variant="h4" color="primary" sx={{ fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
               Dashboard de Ventas
             </Typography>
-            <Typography color="text.secondary" fontSize={14}>
-              Filtra por fecha, negocio (solo SuperAdmin) y busca en tus ventas
-            </Typography>
-          </div>
-          <Stack direction="row" spacing={1}>
-            <MuiTooltip title="Refrescar (manteniendo filtros)" arrow>
-              <IconButton
-                size="small"
-                onClick={() => {
-                  setFilterToken((x) => x + 1);
-                }}
-                aria-label="Refrescar"
-                sx={{
-                  ml: 1,
-                  color: "primary.main",
-                  "&:hover": { color: "primary.dark" },
-                }}
-              >
-                <RefreshIcon />
-              </IconButton>
-            </MuiTooltip>
+            <Chip icon={<ShieldIcon />} label={isSuperAdmin ? "Solo SUPER ADMIN" : "Solo ADMIN"} color="secondary" variant="outlined" size={isMobile ? "small" : "medium"} />
           </Stack>
-        </Stack>
 
-        {/* Filtros */}
-        <Paper sx={{ p: 2.5, borderRadius: 3 }}>
-          <Stack
-            direction={{ xs: "column", lg: "row" }}
-            spacing={2}
-            alignItems={{ xs: "stretch", lg: "center" }}
-          >
+        {/* Filtros Apilables */}
+        <Paper sx={{ p: 2.5, borderRadius: 3, mb: 3 }}>
+          <Grid container spacing={2} alignItems="center">
+            
+            {/* 1. Selector de Negocio (Solo SuperAdmin) */}
             {isSuperAdmin && (
-              <Autocomplete
-                options={negocios}
-                getOptionLabel={(o) => o?.nombre ?? ""}
-                isOptionEqualToValue={(o, v) => o.id === v.id}
-                value={negocios.find((n) => n.id === negocioId) ?? null}
-                onChange={(_, newVal) => {
-                  const nextId = newVal ? newVal.id : "";
-                  setNegocioId(nextId);
-                }}
-                loading={loadingNegocios}
-                clearOnEscape
-                autoHighlight
-                includeInputInList
-                sx={{
-                  minWidth: { sm: 320 },
-                  "& .MuiOutlinedInput-root": { borderRadius: 2 },
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label="Negocio"
-                    placeholder="Escribe para buscar…"
-                    fullWidth
-                    InputProps={{
-                      ...params.InputProps,
-                      endAdornment: (
-                        <>
-                          {loadingNegocios ? (
-                            <CircularProgress
-                              color="inherit"
-                              size={18}
-                              sx={{ mr: 1 }}
-                            />
-                          ) : null}
-                          {params.InputProps.endAdornment}
-                        </>
-                      ),
-                    }}
-                  />
-                )}
-              />
+              // 'grow' hace que se expanda para llenar el espacio
+              <Grid size={{ xs: 12, sm: 'grow' }}>
+                <Autocomplete
+                  options={negocios}
+                  getOptionLabel={(o) => o?.nombre ?? ""}
+                  isOptionEqualToValue={(o, v) => o.id === v.id}
+                  value={negocios.find((n) => n.id === negocioId) ?? null}
+                  onChange={(_, newVal) => {
+                    const nextId = newVal ? newVal.id : "";
+                    setNegocioId(nextId);
+                  }}
+                  loading={loadingNegocios}
+                  clearOnEscape
+                  autoHighlight
+                  fullWidth
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Negocio"
+                      placeholder="Buscar..."
+                      variant="outlined"
+                      InputProps={{
+                        ...params.InputProps,
+                        endAdornment: (
+                          <>
+                            {loadingNegocios ? (
+                              <CircularProgress size={18} sx={{ mr: 1 }} />
+                            ) : null}
+                            {params.InputProps.endAdornment}
+                          </>
+                        ),
+                      }}
+                    />
+                  )}
+                />
+              </Grid>
             )}
 
-            <DatePicker
-              label="Desde"
-              value={desde}
-              onChange={(v) => setDesde(v)}
-              format="DD-MMM-YYYY"
-              slotProps={{
-                textField: {
-                  fullWidth: true,
-                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
-                },
-              }}
-            />
-            <DatePicker
-              label="Hasta"
-              value={hasta}
-              onChange={(v) => setHasta(v)}
-              format="DD-MMM-YYYY"
-              slotProps={{
-                textField: {
-                  fullWidth: true,
-                  sx: { "& .MuiOutlinedInput-root": { borderRadius: 2 } },
-                },
-              }}
-            />
+            {/* 2. Fechas */}
+            <Grid size={{ xs: 12, sm: 'grow' }}>
+              <DatePicker
+                label="Desde"
+                value={desde}
+                onChange={(v) => setDesde(v)}
+                format="DD-MMM-YYYY"
+                slotProps={{ textField: { fullWidth: true } }}
+              />
+            </Grid>
 
-            <Stack direction="row" spacing={1}>
-              <Button
-                variant="contained"
-                onClick={() => {
-                  setFilterToken((x) => x + 1);
-                }}
-                disabled={loading || loadingCustom}
-                sx={{ borderRadius: 2, px: 3 }}
-              >
-                {loading || loadingCustom ? (
-                  <CircularProgress size={20} />
-                ) : (
-                  "Filtrar"
-                )}
-              </Button>
-              <Button
-                variant="outlined"
-                onClick={() => {
-                  const d = dayjs();
-                  setDesde(d.startOf("day"));
-                  setHasta(d.endOf("day"));
-                  setFilterToken((x) => x + 1);
-                }}
-                sx={{ borderRadius: 2 }}
-              >
-                Limpiar
-              </Button>
-            </Stack>
-          </Stack>
+            <Grid size={{ xs: 12, sm: 'grow' }}>
+              <DatePicker
+                label="Hasta"
+                value={hasta}
+                onChange={(v) => setHasta(v)}
+                format="DD-MMM-YYYY"
+                slotProps={{ textField: { fullWidth: true } }}
+              />
+            </Grid>
+
+            {/* 3. Botones de Acción */}
+            {/* 'auto' hace que ocupe solo el espacio necesario, no más */}
+            <Grid size={{ xs: 12, md: 'auto' }} sx={{ minWidth: 'fit-content' }}>
+              <Stack direction="row" spacing={1.5} sx={{ height: '56px', alignItems: 'stretch' }}>
+                <Button
+                  variant="contained"
+                  onClick={() => setFilterToken((x) => x + 1)}
+                  disabled={loading || loadingCustom}
+                  // Quitamos fullWidth, ajustamos padding y minWidth
+                  sx={{ borderRadius: 1.5, px: 3, minWidth: 120, fontSize: '1rem' }}
+                >
+                  {loading || loadingCustom ? <CircularProgress size={24} color="inherit" /> : "Filtrar"}
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    const d = dayjs();
+                    setDesde(d.startOf("day"));
+                    setHasta(d.endOf("day"));
+                    setFilterToken((x) => x + 1);
+                    if(isSuperAdmin) setNegocioId("");
+                  }}
+                  sx={{ borderRadius: 1.5, px: 3, minWidth: 100 }}
+                >
+                  Limpiar
+                </Button>
+              </Stack>
+            </Grid>
+
+          </Grid>
         </Paper>
 
-        {/* KPIs */}
+        {/* KPIs Grid Responsivo */}
         {data && (
-          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(4, 1fr)" },
+              gap: 2,
+              mb: 3
+            }}
+          >
             {kpis.map((k, i) => (
-              <Paper key={i} sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-                <Stack
-                  direction="row"
-                  alignItems="center"
-                  justifyContent="space-between"
-                >
+              <Paper key={i} sx={{ p: 2.5, borderRadius: 3 }}>
+                <Stack direction="row" alignItems="center" justifyContent="space-between">
                   <Typography color="text.secondary">{k.label}</Typography>
                   {k.icon}
                 </Stack>
@@ -1137,628 +1011,197 @@ export default function DashboardPage() {
                 </Typography>
               </Paper>
             ))}
-          </Stack>
+          </Box>
         )}
 
-        {/* ======== SOLO GRÁFICAS con TABS ======== */}
-        <Paper sx={{ borderRadius: 3 }}>
+        {/* Gráficas con Tabs */}
+        <Paper sx={{ borderRadius: 3, mb: 3 }}>
           <Tabs
             value={chartsTab}
             onChange={(_, v) => setChartsTab(v)}
             textColor="primary"
             indicatorColor="primary"
+            variant="scrollable"
+            scrollButtons="auto"
             sx={{ px: 2 }}
           >
             <Tab label="Ventas" />
-            <Tab label="Ventas Promociones" />
+            <Tab label="Promociones" />
           </Tabs>
           <Divider />
 
           <Box sx={{ p: 2 }}>
-            {chartsTab === 0 ? (
-              <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
-                {/* Ventas por día */}
-                <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="space-between"
-                  >
-                    <div>
-                      <Typography fontWeight={800} color="primary">
-                        Ventas por día
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Resultado por fecha (máx. 7 días)
-                      </Typography>
-                    </div>
-                    <Stack direction="row" spacing={1}>
-                      <MuiTooltip title="Excel (datos de la gráfica)" arrow>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<DownloadIcon />}
-                          onClick={onExportVentasDiaXlsx}
-                          sx={niceBtn()}
-                        >
-                          Excel
-                        </Button>
-                      </MuiTooltip>
-                      <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<ImageIcon />}
-                          onClick={() => savePng(ventasDiaRef, "ventas_por_dia")}
-                          sx={niceBtn()}
-                        >
-                          PNG
-                        </Button>
-                      </MuiTooltip>
-                      <MuiTooltip title="SVG (vector editable)" arrow>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<PolylineIcon />}
-                          onClick={() => saveSvg(ventasDiaRef, "ventas_por_dia")}
-                          sx={niceBtn()}
-                        >
-                          SVG
-                        </Button>
-                      </MuiTooltip>
-                    </Stack>
-                  </Stack>
-
-                  <Box
-                    ref={ventasDiaRef}
-                    sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}
-                  >
-                    <Box sx={{ height: 260 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={ventasPorDia}
-                          margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis
-                            dataKey="dia"
-                            tickFormatter={fmtDateAxis}
-                            tick={{ fontSize: 11 }}
-                          />
-                          <YAxis />
-                          <Tooltip
-                            labelFormatter={(v) => fmtDateAxis(String(v))}
-                          />
-                          <Bar dataKey="ventas" radius={[6, 6, 0, 0]}>
-                            {ventasPorDia.map((row, i) => (
-                              <Cell key={i} fill={row.color} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </Box>
-                  </Box>
-                </Paper>
-
-                {/* Top artículos */}
-                <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="space-between"
-                  >
-                    <div>
-                      <Typography fontWeight={800} color="primary">
-                        Artículos más vendidos
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Top 10 por cantidad
-                      </Typography>
-                    </div>
-                    <Stack direction="row" spacing={1}>
-                      <MuiTooltip title="Excel (datos de la gráfica)" arrow>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<DownloadIcon />}
-                          onClick={onExportTopArtXlsx}
-                          sx={niceBtn()}
-                        >
-                          Excel
-                        </Button>
-                      </MuiTooltip>
-                      <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<ImageIcon />}
-                          onClick={() => savePng(topArtRef, "top_articulos")}
-                          sx={niceBtn()}
-                        >
-                          PNG
-                        </Button>
-                      </MuiTooltip>
-                      <MuiTooltip title="SVG (vector editable)" arrow>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<PolylineIcon />}
-                          onClick={() => saveSvg(topArtRef, "top_articulos")}
-                          sx={niceBtn()}
-                        >
-                          SVG
-                        </Button>
-                      </MuiTooltip>
-                    </Stack>
-                  </Stack>
-
-                  <Box
-                    ref={topArtRef}
-                    sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}
-                  >
-                    <Box sx={{ height: 260 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={topArticulos}
-                          margin={{ top: 8, right: 16, left: -10, bottom: 0 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                          <YAxis />
-                          <Tooltip
-                            formatter={(value, name) => [value, "Cantidad"]}
-                          />
-                          <Bar dataKey="qty" radius={[6, 6, 0, 0]}>
-                            {topArticulos.map((entry, i) => (
-                              <Cell key={i} fill={entry.color} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </Box>
-                  </Box>
-                </Paper>
-              </Stack>
-            ) : (
-              // TAB: Ventas Promociones
-              <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
-                {/* Ventas de promociones por día */}
-                <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="space-between"
-                  >
-                    <div>
-                      <Typography fontWeight={800} color="primary">
-                        Ventas de promociones personalizadas
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Promociones personalizadas
-                        (máx. 7 días, Top 10)
-                      </Typography>
-                    </div>
-                    <Stack direction="row" spacing={1}>
-                      <MuiTooltip
-                        title="Excel (datos de las promociones)"
-                        arrow
-                      >
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<DownloadIcon />}
-                          onClick={onExportPromosXlsx}
-                          sx={niceBtn()}
-                        >
-                          Excel
-                        </Button>
-                      </MuiTooltip>
-                      <MuiTooltip title="PNG (imagen de la gráfica)" arrow>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<ImageIcon />}
-                          onClick={() => savePng(promoChartRef, "promos_por_dia")}
-                          sx={niceBtn()}
-                        >
-                          PNG
-                        </Button>
-                      </MuiTooltip>
-                      <MuiTooltip title="SVG (vector editable)" arrow>
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<PolylineIcon />}
-                          onClick={() => saveSvg(promoChartRef, "promos_por_dia")}
-                          sx={niceBtn()}
-                        >
-                          SVG
-                        </Button>
-                      </MuiTooltip>
-                    </Stack>
-                  </Stack>
-
-                  <Box
-                    ref={promoChartRef}
-                    sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}
-                  >
-                    {errorCustom && (
-                      <Typography color="error" mb={1}>
-                        {errorCustom}
-                      </Typography>
-                    )}
-                    {loadingCustom ? (
-                      <Box display="flex" justifyContent="center" py={6}>
-                        <CircularProgress />
-                      </Box>
-                    ) : (
-                      <Box sx={{ height: 260 }}>
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart
-                            data={promoCombinedData}
-                            margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis
-                              dataKey="fecha"
-                              tickFormatter={(v) => fmtDateAxis(String(v))}
-                              tick={{ fontSize: 11 }}
-                            />
-                            <YAxis />
-                            <Tooltip
-                              labelFormatter={(v) =>
-                                fmtDateAxis(String(v))
-                              }
-                            />
-                            <Legend />
-                            {promoProductNames.map((name, i) => (
-                              <Bar
-                                key={name}
-                                dataKey={name}
-                                stackId="ventas"
-                                radius={[6, 6, 0, 0]}
-                                fill={SOFT_COLORS[i % SOFT_COLORS.length]}
-                              />
-                            ))}
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </Box>
-                    )}
-                  </Box>
-                </Paper>
-
-                {/* Top promociones */}
-                <Paper sx={{ p: 2.5, flex: 1, borderRadius: 3 }}>
-                  <Stack
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="space-between"
-                  >
-                    <div>
-                      <Typography fontWeight={800} color="primary">
-                        Top promociones personalizadas
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Top 10 por cantidad vendida
-                      </Typography>
-                    </div>
-                    <Stack direction="row" spacing={1}>
-                      <MuiTooltip
-                        title="Excel (Top promociones personalizadas)"
-                        arrow
-                      >
-                        <Button
-                          variant="outlined"
-                          size="small"
-                          startIcon={<DownloadIcon />}
-                          onClick={onExportPromosXlsx}
-                          sx={niceBtn()}
-                        >
-                          Excel
-                        </Button>
-                      </MuiTooltip>
-                    </Stack>
-                  </Stack>
-
-                  <Box sx={{ mt: 1.5, p: 1, borderRadius: 2, background: "#fff" }}>
-                    <Box sx={{ height: 260 }}>
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={promoTopSeries}
-                          margin={{ top: 8, right: 16, left: 0, bottom: 0 }}
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-                          <YAxis />
-                          <Tooltip />
-                          <Bar dataKey="qty" name="Cantidad" radius={[6, 6, 0, 0]}>
-                            {promoTopSeries.map((entry, i) => (
-                              <Cell key={i} fill={entry.color} />
-                            ))}
-                          </Bar>
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </Box>
-                  </Box>
-                </Paper>
-              </Stack>
-            )}
+            <Stack direction={{ xs: "column", lg: "row" }} gap={2}>
+                {chartsTab === 0 ? (
+                    <>
+                    <Paper sx={{ p: 2, flex: 1, borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                        <Typography fontWeight={700} mb={2} color="primary">Ventas por día</Typography>
+                        <Typography variant="caption" color="text.secondary" mb={2} display="block">Resultado por fecha (máx. 7 días)</Typography>
+                        <Box sx={{ height: 250 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={ventasPorDia}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="dia" tickFormatter={fmtDateAxis} tick={{fontSize: 10}} />
+                                    <YAxis tick={{fontSize: 10}} />
+                                    <Tooltip labelFormatter={(v) => fmtDateAxis(String(v))} />
+                                    <Bar dataKey="ventas" radius={[4, 4, 0, 0]}>
+                                        {ventasPorDia.map((r, i) => <Cell key={i} fill={r.color} />)}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </Box>
+                    </Paper>
+                    <Paper sx={{ p: 2, flex: 1, borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                         <Typography fontWeight={700} mb={2} color="primary">Artículos más vendidos</Typography>
+                         <Typography variant="caption" color="text.secondary" mb={2} display="block">Top 10 por cantidad</Typography>
+                         <Box sx={{ height: 250 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={topArticulos} layout="vertical">
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis type="number" hide />
+                                    <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 10}} />
+                                    <Tooltip 
+                                        formatter={(value) => [value, "Cantidad"]} 
+                                        labelStyle={{ color: "#333", fontWeight: "bold" }} 
+                                      />
+                                    <Bar dataKey="qty" radius={[0, 4, 4, 0]}>
+                                        {topArticulos.map((r, i) => <Cell key={i} fill={r.color} />)}
+                                    </Bar>
+                                </BarChart>
+                            </ResponsiveContainer>
+                         </Box>
+                    </Paper>
+                    </>
+                ) : (
+                    <Paper sx={{ p: 2, width: '100%', borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                         <Typography fontWeight={700} mb={2} color="primary">Ventas de promociones personalizadas</Typography>
+                         <Typography variant="caption" color="text.secondary" mb={2} display="block">Promociones personalizadas (máx. 7 días, Top 10)</Typography>
+                         <Box sx={{ height: 300 }}>
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={promoCombinedData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="fecha" tickFormatter={fmtDateAxis} />
+                                    <YAxis />
+                                    <Tooltip labelFormatter={(v) => fmtDateAxis(String(v))}/>
+                                    <Legend />
+                                    {promoProductNames.map((name, i) => (
+                                        <Bar key={name} dataKey={name} stackId="a" fill={SOFT_COLORS[i % SOFT_COLORS.length]} />
+                                    ))}
+                                </BarChart>
+                            </ResponsiveContainer>
+                         </Box>
+                    </Paper>
+                )}
+            </Stack>
           </Box>
         </Paper>
 
-        {/* ========= Tabla ========= */}
-        <Paper sx={{ p: 2.5, borderRadius: 3 }}>
-          <Typography
-            variant="h6"
-            fontWeight={800}
-            color="primary"
-            sx={{ mb: 1 }}
-          >
+        {/* Tabla de Ventas */}
+        <Paper sx={{ p: 2.5, borderRadius: 3, width: '100%', overflow: 'hidden' }}>
+          <Typography variant="h6" fontWeight={800} color="primary" sx={{ mb: 2 }}>
             Ventas recientes
           </Typography>
-
           <Divider sx={{ mb: 2 }} />
 
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            spacing={2}
-            alignItems={{ xs: "stretch", md: "center" }}
-            sx={{ mb: 2, maxWidth: 900 }}
-          >
+          <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 2 }}>
             <TextField
               value={search}
-              onChange={(e) => {
-                setSearch(e.target.value);
-                setPaginationModel((m) => ({ ...m, page: 0 }));
-              }}
-              placeholder="Buscar por folio, artículo, descripción, teléfono, monto, cashback o cobrado…"
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar..."
               size="small"
               fullWidth
-              InputProps={
-                {
-                  startAdornment: (
-                    <SearchIcon
-                      fontSize="small"
-                      sx={{ mr: 1, color: "text.disabled" }}
-                    />
-                  ),
-                  sx: { borderRadius: 20, height: 44 },
-                } as any
-              }
             />
-
-            <Stack direction="row" spacing={1} alignItems="center">
-              <MuiTooltip title="Exportar a Excel (según filtros)" arrow>
-                <span>
-                  <Button
-                    variant="outlined"
-                    size="small"
-                    startIcon={
-                      exportingGrid ? (
-                        <CircularProgress size={14} />
-                      ) : (
-                        <DownloadIcon />
-                      )
-                    }
-                    disabled={exportingGrid || !data?.rows?.length}
-                    onClick={onExportGridXlsx}
-                    sx={niceBtn()}
-                  >
-                    Excel
-                  </Button>
-                </span>
-              </MuiTooltip>
-              <MuiTooltip title="Refrescar tabla" arrow>
-                <IconButton
-                  size="small"
-                  onClick={refreshGridRowsOnly}
-                  sx={{
-                    color: "primary.main",
-                    "&:hover": { color: "primary.dark" },
-                  }}
-                >
-                  <RefreshIcon />
+            <Stack direction="row" spacing={1}>
+                <Button variant="outlined" startIcon={<DownloadIcon />} onClick={onExportGridXlsx}>
+                    Exportar
+                </Button>
+                <IconButton onClick={refreshGridRowsOnly} color="primary">
+                    <RefreshIcon />
                 </IconButton>
-              </MuiTooltip>
             </Stack>
           </Stack>
 
-          {loading && !data ? (
-            <Box display="flex" justifyContent="center" py={6}>
-              <CircularProgress />
-            </Box>
-          ) : (
-            <Box sx={{ height: dynamicHeight, width: "100%" }}>
-              <DataGrid
-                rows={data?.rows ?? []}
-                columns={columns}
-                getRowId={(r) => r.folio}
-                paginationModel={paginationModel}
-                onPaginationModelChange={setPaginationModel}
-                disableRowSelectionOnClick
-                pageSizeOptions={[5, 10, 20, 50]}
-                loading={loadingRows || (loading && !!data)}
-                sx={{
-                  borderRadius: 3,
-                  "& .MuiDataGrid-columnHeaders": {
-                    backgroundColor: "action.hover",
-                    fontWeight: 700,
+          <Box sx={{ height: dynamicHeight, width: "100%", overflowX: 'auto' }}>
+            <DataGrid
+              rows={data?.rows ?? []}
+              columns={columns}
+              getRowId={(r) => r.folio}
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
+              pageSizeOptions={[5, 10, 20, 50]}
+              loading={loadingRows || (loading && !!data)}
+              disableRowSelectionOnClick
+              initialState={{
+                columns: {
+                  columnVisibilityModel: {
+                    descripcion: !isMobile,
+                    telefonoCliente: !isMobile,
+                    creadoFecha: !isMobile,
                   },
-                  "& .MuiDataGrid-row:nth-of-type(even)": {
-                    backgroundColor: "#ffffff",
-                  },
-                  "& .MuiDataGrid-row:nth-of-type(odd)": {
-                    backgroundColor: "rgba(14,165,233,0.06)",
-                  },
-                  "& .MuiDataGrid-row:hover": {
-                    backgroundColor: "rgba(14,165,233,0.12) !important",
-                  },
-                  "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within":
-                    { outline: "none" },
-                }}
-              />
-            </Box>
-          )}
+                },
+              }}
+              sx={{
+                minWidth: isMobile ? 800 : '100%',
+                "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
+              }}
+            />
+          </Box>
         </Paper>
       </Box>
 
-      {/* ===== Modal de edición ===== */}
+      {/* Modals y Toasts */}
       <Dialog open={editOpen} onClose={closeEditModal} maxWidth="sm" fullWidth>
-        <DialogTitle sx={{ fontWeight: 800, color: "primary.main" }}>
-          Editar venta
-        </DialogTitle>
-        <DialogContent dividers>
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            gap={2}
-            sx={{ mt: 1 }}
-          >
-            <TextField label="Folio" fullWidth value={editForm.folio} disabled />
-            <TextField
-              label="Artículo "
-              fullWidth
-              value={editForm.articulo}
-              onChange={onEditChange("articulo")}
-              required
-            />
-          </Stack>
-
-          <TextField
-            label="Descripción"
-            fullWidth
-            sx={{ mt: 2 }}
-            value={editForm.descripcion}
-            onChange={onEditChange("descripcion")}
-          />
-
-          <Stack
-            direction={{ xs: "column", md: "row" }}
-            gap={2}
-            sx={{ mt: 2 }}
-          >
-            <TextField
-              label="Monto "
-              fullWidth
-              inputMode="decimal"
-              value={editForm.monto}
-              onChange={onNumericChange("monto")}
-              placeholder="Ej. 55.00"
-              inputProps={{ pattern: "^[0-9]+(\\.[0-9]{0,2})?$" }}
-              required
-            />
-            <TextField
-              label="Cantidad"
-              fullWidth
-              inputMode="decimal"
-              value={editForm.cantidad}
-              onChange={onNumericChange("cantidad")}
-              placeholder="Ej. 1"
-              inputProps={{ pattern: "^[0-9]+(\\.[0-9]{0,2})?$" }}
-              required
-            />
-          </Stack>
-
-          {!!editError && (
-            <Typography color="error" sx={{ mt: 2 }}>
-              {editError}
-            </Typography>
-          )}
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ mt: 1, display: "block" }}
-          >
-            Solo se modificarán Artículo, Descripción, Monto y Cantidad. El
-            cashback y el total cobrado se recalculan automáticamente.
-          </Typography>
-        </DialogContent>
-        <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button
-            startIcon={<CancelIcon />}
-            variant="outlined"
-            color="warning"
-            onClick={onCancelarEdicion}
-            disabled={editSaving}
-          >
-            Cancelar edición
-          </Button>
-          <Button
-            variant="contained"
-            onClick={commitEdit}
-            disabled={editSaving}
-            startIcon={
-              editSaving ? <CircularProgress size={16} /> : undefined
-            }
-          >
-            {editSaving ? "Guardando…" : "Guardar cambios"}
-          </Button>
-        </DialogActions>
+          <DialogTitle>Editar Venta</DialogTitle>
+          <DialogContent>
+             <Stack spacing={2} mt={1}>
+                <TextField label="Artículo" value={editForm.articulo} onChange={onEditChange("articulo")} />
+                <TextField label="Monto" value={editForm.monto} onChange={onNumericChange("monto")} />
+                <TextField label="Cantidad" value={editForm.cantidad} onChange={onNumericChange("cantidad")} />
+             </Stack>
+          </DialogContent>
+          <DialogActions>
+             <Button onClick={onCancelarEdicion}>Cancelar</Button>
+             <Button variant="contained" onClick={commitEdit}>Guardar</Button>
+          </DialogActions>
       </Dialog>
 
-      {/* ===== Dialog: confirmar eliminación ===== */}
-      <Dialog
-        open={confirmDeleteOpen}
-        onClose={handleCancelConfirmDelete}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Eliminar venta</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            ¿Estás seguro de eliminar esta venta?
-          </Typography>
-          <Typography variant="body2" sx={{ mt: 1 }}>
-            Recuerda que el cashback de este cliente se perderán.
-          </Typography>
-          {deleteRow && (
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ mt: 1, display: "block" }}
-            >
-              Folio: {deleteRow.folio} · Artículo: {deleteRow.articulo}
-            </Typography>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>
-          <Button
-            variant="outlined"
-            color="warning"
-            onClick={handleCancelConfirmDelete}
-            disabled={deleting}
-          >
-            Cancelar
-          </Button>
-          <Button
-            variant="contained"
-            color="error"
-            startIcon={
-              deleting ? <CircularProgress size={16} /> : <DeleteIcon />
-            }
-            onClick={handleDeleteVenta}
-            disabled={deleting}
-          >
-            {deleting ? "Eliminando…" : "Eliminar venta"}
-          </Button>
-        </DialogActions>
+      <Dialog open={confirmDeleteOpen} onClose={handleCancelConfirmDelete}>
+          <DialogTitle>Eliminar Venta</DialogTitle>
+          <DialogContent>¿Estás seguro? Esta acción es irreversible.</DialogContent>
+          <DialogActions>
+              <Button onClick={handleCancelConfirmDelete}>Cancelar</Button>
+              <Button variant="contained" color="error" onClick={handleDeleteVenta}>Eliminar</Button>
+          </DialogActions>
       </Dialog>
 
-      {/* TOAST */}
+{/* TOAST PERSONALIZADO */}
       <Snackbar
         open={toastOpen}
-        autoHideDuration={2200}
+        autoHideDuration={3000}
         onClose={() => setToastOpen(false)}
+        // Posición: Arriba a la Derecha
         anchorOrigin={{ vertical: "top", horizontal: "right" }}
       >
         <Alert
           onClose={() => setToastOpen(false)}
           severity={toastSeverity}
-          variant="filled"
-          sx={{ width: "100%" }}
+          // variant="filled" es la clave para que se vea con color sólido
+          variant="filled" 
+          sx={{
+            width: "100%",
+            boxShadow: 3, // Sombra para que resalte
+            fontSize: '0.95rem',
+            // Forzamos el color verde específico si es success
+            ...(toastSeverity === 'success' && {
+                bgcolor: '#2e7d32', // Verde Material Design
+                color: '#fff'
+            })
+          }}
         >
           {toastMsg}
         </Alert>
       </Snackbar>
+
     </LocalizationProvider>
   );
 }
