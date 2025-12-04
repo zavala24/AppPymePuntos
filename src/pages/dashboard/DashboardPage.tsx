@@ -31,12 +31,8 @@ import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import PercentIcon from "@mui/icons-material/Percent";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import DownloadIcon from "@mui/icons-material/Download";
-import ImageIcon from "@mui/icons-material/Image";
-import PolylineIcon from "@mui/icons-material/Polyline";
-import SearchIcon from "@mui/icons-material/Search";
 import EditIcon from "@mui/icons-material/Edit";
 import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
-import CancelIcon from "@mui/icons-material/Cancel";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ShieldIcon from "@mui/icons-material/Security";
 
@@ -62,7 +58,6 @@ import "dayjs/locale/es";
 
 // Excel / Imagen
 import * as XLSX from "xlsx";
-import * as htmlToImage from "html-to-image";
 
 // Services
 import { SellRepository } from "@/infrastructure/repositories/SellRepository";
@@ -137,15 +132,6 @@ function fmtDateAxis(value: string) {
   return d.format("DD-MMM-YYYY").toLowerCase();
 }
 
-function niceBtn() {
-  return {
-    borderRadius: 2,
-    textTransform: "none",
-    px: 1.5,
-    minWidth: 0,
-    height: 32,
-  } as const;
-}
 const SOFT_COLORS = [
   "#60a5fa",
   "#34d399",
@@ -202,10 +188,6 @@ export default function DashboardPage() {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 350);
     return () => clearTimeout(t);
   }, [search]);
-
-  const ventasDiaRef = React.useRef<HTMLDivElement>(null);
-  const topArtRef = React.useRef<HTMLDivElement>(null);
-  const promoChartRef = React.useRef<HTMLDivElement>(null);
 
   const [editOpen, setEditOpen] = React.useState(false);
   const [editSaving, setEditSaving] = React.useState(false);
@@ -542,28 +524,6 @@ export default function DashboardPage() {
     XLSX.writeFile(wb, fileName.endsWith(".xlsx") ? fileName : `${fileName}.xlsx`);
   };
 
-  const onExportVentasDiaXlsx = () => {
-    const rows = ventasPorDia.map((r) => ({
-      Día: fmtDateAxis(String(r.dia)),
-      Ventas: r.ventas,
-    }));
-    exportSheet(
-      [{ name: "Ventas_por_dia", rows }],
-      `ventas_por_dia_${new Date().toISOString().slice(0, 10)}.xlsx`
-    );
-  };
-
-  const onExportTopArtXlsx = () => {
-    const rows = topArticulos.map((r) => ({
-      Artículo: r.name,
-      Cantidad: r.qty,
-    }));
-    exportSheet(
-      [{ name: "Top_articulos", rows }],
-      `top_articulos_${new Date().toISOString().slice(0, 10)}.xlsx`
-    );
-  };
-
   const onExportGridXlsx = async () => {
     try {
       if (!data?.rows?.length) {
@@ -683,27 +643,6 @@ export default function DashboardPage() {
 
       return result;
     }, [customData, hasta]);
-
-  const onExportPromosXlsx = () => {
-    if (!customData?.series?.length) return;
-    const combined = promoCombinedData.map((r) => ({
-      Fecha: fmtDateAxis(String(r.fecha)),
-      ...r,
-    }));
-    const perSeries = customData.series.map((s) => ({
-      name: s.nombreProducto.slice(0, 31),
-      rows: s.data.map((p) => ({
-        Fecha: fmtDateAxis(String(p.fecha)),
-        Ventas: p.ventas,
-        Monto: p.monto,
-        Canjes: p.canjes,
-      })),
-    }));
-    exportSheet(
-      [{ name: "Promociones_por_dia", rows: combined }, ...perSeries],
-      `promos_custom_${new Date().toISOString().slice(0, 10)}.xlsx`
-    );
-  };
 
   const onClickDeleteRow = (row: VentaRowDto) => {
       setDeleteRow(row);
@@ -1052,19 +991,19 @@ export default function DashboardPage() {
                         </Box>
                     </Paper>
                     <Paper sx={{ p: 2, flex: 1, borderRadius: 2, border: '1px solid #e2e8f0' }}>
-                         <Typography fontWeight={700} mb={2} color="primary">Artículos más vendidos</Typography>
-                         <Typography variant="caption" color="text.secondary" mb={2} display="block">Top 10 por cantidad</Typography>
-                         <Box sx={{ height: 250 }}>
+                          <Typography fontWeight={700} mb={2} color="primary">Artículos más vendidos</Typography>
+                          <Typography variant="caption" color="text.secondary" mb={2} display="block">Top 10 por cantidad</Typography>
+                          <Box sx={{ height: 250 }}>
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={topArticulos} layout="vertical">
+                                <BarChart data={topArticulos}>
                                     <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis type="number" hide />
-                                    <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 10}} />
+                                    <XAxis dataKey="name" tick={{fontSize: 10}} interval={0} angle={-15} textAnchor="end" height={60} />
+                                    <YAxis tick={{fontSize: 10}} allowDecimals={false} />
                                     <Tooltip 
                                         formatter={(value) => [value, "Cantidad"]} 
                                         labelStyle={{ color: "#333", fontWeight: "bold" }} 
-                                      />
-                                    <Bar dataKey="qty" radius={[0, 4, 4, 0]}>
+                                    />
+                                    <Bar dataKey="qty" radius={[4, 4, 0, 0]}>
                                         {topArticulos.map((r, i) => <Cell key={i} fill={r.color} />)}
                                     </Bar>
                                 </BarChart>
@@ -1074,9 +1013,9 @@ export default function DashboardPage() {
                     </>
                 ) : (
                     <Paper sx={{ p: 2, width: '100%', borderRadius: 2, border: '1px solid #e2e8f0' }}>
-                         <Typography fontWeight={700} mb={2} color="primary">Ventas de promociones personalizadas</Typography>
-                         <Typography variant="caption" color="text.secondary" mb={2} display="block">Promociones personalizadas (máx. 7 días, Top 10)</Typography>
-                         <Box sx={{ height: 300 }}>
+                          <Typography fontWeight={700} mb={2} color="primary">Ventas de promociones personalizadas</Typography>
+                          <Typography variant="caption" color="text.secondary" mb={2} display="block">Promociones personalizadas (máx. 7 días, Top 10)</Typography>
+                          <Box sx={{ height: 300 }}>
                             <ResponsiveContainer width="100%" height="100%">
                                 <BarChart data={promoCombinedData}>
                                     <CartesianGrid strokeDasharray="3 3" />
@@ -1143,6 +1082,14 @@ export default function DashboardPage() {
               sx={{
                 minWidth: isMobile ? 800 : '100%',
                 "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
+                // Zebra striping styles
+                "& .MuiDataGrid-row:nth-of-type(odd)": {
+                  backgroundColor: "#ffffff",
+                },
+                "& .MuiDataGrid-row:nth-of-type(even)": {
+                  backgroundColor: "#f0f7ff", // Light blue
+                },
+                border: "none", // Optional clean look
               }}
             />
           </Box>
@@ -1155,6 +1102,7 @@ export default function DashboardPage() {
           <DialogContent>
              <Stack spacing={2} mt={1}>
                 <TextField label="Artículo" value={editForm.articulo} onChange={onEditChange("articulo")} />
+                <TextField label="Descripción" value={editForm.descripcion} onChange={onEditChange("descripcion")} />
                 <TextField label="Monto" value={editForm.monto} onChange={onNumericChange("monto")} />
                 <TextField label="Cantidad" value={editForm.cantidad} onChange={onNumericChange("cantidad")} />
              </Stack>
