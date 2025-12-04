@@ -32,7 +32,8 @@ import PercentIcon from "@mui/icons-material/Percent";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import DownloadIcon from "@mui/icons-material/Download";
 import EditIcon from "@mui/icons-material/Edit";
-import AutoFixHighIcon from "@mui/icons-material/AutoFixHigh";
+// CAMBIO: Icono de oferta para promociones personalizadas
+import LocalOfferIcon from "@mui/icons-material/LocalOffer"; 
 import DeleteIcon from "@mui/icons-material/Delete";
 import ShieldIcon from "@mui/icons-material/Security";
 
@@ -158,12 +159,18 @@ export default function DashboardPage() {
   const role = (localStorage.getItem("pa_role") || "").toLowerCase();
   const isSuperAdmin = role === "superadmin";
 
+  // 1. ESTADOS VISUALES (Lo que el usuario selecciona)
   const [desde, setDesde] = React.useState<Dayjs | null>(dayjs().startOf("day"));
   const [hasta, setHasta] = React.useState<Dayjs | null>(dayjs().endOf("day"));
+  const [negocioId, setNegocioId] = React.useState<number | "">("");
+
+  // 2. ESTADOS APLICADOS (Lo que realmente usa la API)
+  const [appliedDesde, setAppliedDesde] = React.useState<Dayjs | null>(dayjs().startOf("day"));
+  const [appliedHasta, setAppliedHasta] = React.useState<Dayjs | null>(dayjs().endOf("day"));
+  const [appliedNegocioId, setAppliedNegocioId] = React.useState<number | "">("");
 
   const [negocios, setNegocios] = React.useState<NegocioOption[]>([]);
   const [loadingNegocios, setLoadingNegocios] = React.useState(false);
-  const [negocioId, setNegocioId] = React.useState<number | "">("");
 
   const [chartsTab, setChartsTab] = React.useState<0 | 1>(0);
   const [filterToken, setFilterToken] = React.useState(1);
@@ -266,7 +273,7 @@ export default function DashboardPage() {
     };
 
   const commitEdit = async () => {
-    const idNegocio = typeof negocioId === "number" ? negocioId : getIdNegocioActual() ?? 0;
+    const idNegocio = typeof appliedNegocioId === "number" ? appliedNegocioId : getIdNegocioActual() ?? 0;
 
     if (!editForm.articulo.trim()) {
       setEditError("El artículo es obligatorio.");
@@ -353,15 +360,21 @@ export default function DashboardPage() {
   }, [isSuperAdmin]);
 
   const loadDashboard = async (overrideIdNegocio?: number | "") => {
+    // Use APPLIED states
+    if (isSuperAdmin && !appliedNegocioId && !overrideIdNegocio) {
+        setData(null);
+        return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      const selectedIdNegocio = typeof overrideIdNegocio === "number" ? overrideIdNegocio : typeof negocioId === "number" ? negocioId : getIdNegocioActual();
+      const selectedIdNegocio = typeof overrideIdNegocio === "number" ? overrideIdNegocio : typeof appliedNegocioId === "number" ? appliedNegocioId : getIdNegocioActual();
 
       const req: DashboardVentasRequest = {
         usuarioNombre,
-        desde: desde ? desde.toDate() : undefined,
-        hasta: hasta ? hasta.toDate() : undefined,
+        desde: appliedDesde ? appliedDesde.toDate() : undefined,
+        hasta: appliedHasta ? appliedHasta.toDate() : undefined,
         page: 1,
         pageSize: 100,
         search: debouncedSearch || null,
@@ -380,15 +393,20 @@ export default function DashboardPage() {
   };
 
   const loadCustomDashboard = async (overrideIdNegocio?: number | "") => {
+    if (isSuperAdmin && !appliedNegocioId && !overrideIdNegocio) {
+        setCustomData(null);
+        return;
+    }
+
     setLoadingCustom(true);
     setErrorCustom(null);
     try {
-      const selectedIdNegocio = typeof overrideIdNegocio === "number" ? overrideIdNegocio : typeof negocioId === "number" ? negocioId : getIdNegocioActual();
+      const selectedIdNegocio = typeof overrideIdNegocio === "number" ? overrideIdNegocio : typeof appliedNegocioId === "number" ? appliedNegocioId : getIdNegocioActual();
 
       const req: DashboardVentasCustomRequest = {
         idNegocio: selectedIdNegocio ?? 0,
-        desde: desde ? desde.toDate() : undefined,
-        hasta: hasta ? hasta.toDate() : undefined,
+        desde: appliedDesde ? appliedDesde.toDate() : undefined,
+        hasta: appliedHasta ? appliedHasta.toDate() : undefined,
       };
 
       const res = await sellService.getVentasCustomDashboard(req);
@@ -402,14 +420,17 @@ export default function DashboardPage() {
   };
 
   const refreshGridRowsOnly = React.useCallback(async () => {
+    // Use APPLIED states
+    if (isSuperAdmin && !appliedNegocioId) return;
+
     try {
       setLoadingRows(true);
-      const selectedIdNegocio = typeof negocioId === "number" ? negocioId : getIdNegocioActual();
+      const selectedIdNegocio = typeof appliedNegocioId === "number" ? appliedNegocioId : getIdNegocioActual();
 
       const req: DashboardVentasRequest = {
         usuarioNombre,
-        desde: desde ? desde.toDate() : undefined,
-        hasta: hasta ? hasta.toDate() : undefined,
+        desde: appliedDesde ? appliedDesde.toDate() : undefined,
+        hasta: appliedHasta ? appliedHasta.toDate() : undefined,
         page: 1,
         pageSize: 100,
         search: debouncedSearch || null,
@@ -424,7 +445,7 @@ export default function DashboardPage() {
     } finally {
       setLoadingRows(false);
     }
-  }, [usuarioNombre, desde, hasta, debouncedSearch, negocioId]);
+  }, [usuarioNombre, appliedDesde, appliedHasta, debouncedSearch, appliedNegocioId, isSuperAdmin]);
 
   React.useEffect(() => {
     loadDashboard();
@@ -434,6 +455,32 @@ export default function DashboardPage() {
   React.useEffect(() => {
     refreshGridRowsOnly();
   }, [debouncedSearch, refreshGridRowsOnly]);
+
+  // Manejador del Botón Filtrar
+  const handleFilter = () => {
+      setAppliedDesde(desde);
+      setAppliedHasta(hasta);
+      setAppliedNegocioId(negocioId);
+      setFilterToken((x) => x + 1);
+  };
+
+  // Manejador del Botón Limpiar
+  const handleClear = () => {
+      const dStart = dayjs().startOf("day");
+      const dEnd = dayjs().endOf("day");
+      
+      // Reset Visual State
+      setDesde(dStart);
+      setHasta(dEnd);
+      if (isSuperAdmin) setNegocioId("");
+
+      // Reset Applied State & Trigger Fetch
+      setAppliedDesde(dStart);
+      setAppliedHasta(dEnd);
+      setAppliedNegocioId(isSuperAdmin ? "" : (getIdNegocioActual() ?? "")); 
+
+      setFilterToken((x) => x + 1);
+  };
 
   const kpis = React.useMemo(() => {
     if (!data) return [];
@@ -465,7 +512,8 @@ export default function DashboardPage() {
     const d = dayjs(iso);
     if (!d.isValid()) return false;
 
-    const end = (hasta ?? dayjs()).endOf("day");
+    // Use appliedHasta for filtering in memory
+    const end = (appliedHasta ?? dayjs()).endOf("day");
     const start = end.clone().startOf("day").subtract(6, "day");
 
     const time = d.valueOf();
@@ -480,7 +528,7 @@ export default function DashboardPage() {
       ventas: x.ventas,
       color: SOFT_COLORS[i % SOFT_COLORS.length],
     }));
-  }, [data, hasta]);
+  }, [data, appliedHasta]); // Depend on appliedHasta
 
   const topArticulos = React.useMemo(() => {
     if (!data) return [];
@@ -642,7 +690,7 @@ export default function DashboardPage() {
       result.promoProductNames = top10.map((x) => x.name);
 
       return result;
-    }, [customData, hasta]);
+    }, [customData, appliedHasta]); // Depend on appliedHasta
 
   const onClickDeleteRow = (row: VentaRowDto) => {
       setDeleteRow(row);
@@ -657,7 +705,7 @@ export default function DashboardPage() {
 
   const handleDeleteVenta = async () => {
     if (!deleteRow) return;
-    const idNegocio = typeof negocioId === "number" ? negocioId : getIdNegocioActual() ?? 0;
+    const idNegocio = typeof appliedNegocioId === "number" ? appliedNegocioId : getIdNegocioActual() ?? 0;
 
     const dto: DeleteVentaFromRowDto = {
       folio: Number(deleteRow.folio),
@@ -688,29 +736,56 @@ export default function DashboardPage() {
   };
 
   const columns: GridColDef<VentaRowDto>[] = [
-    { field: "folio", headerName: "Folio", width: 80, align: "center", headerAlign: "center" },
-    { field: "articulo", headerName: "Artículo", minWidth: 120, flex: 1 },
+    { 
+        field: "folio", 
+        headerName: "Folio", 
+        width: 80, 
+        align: "center", 
+        headerAlign: "center",
+        // Force min width so it doesn't shrink
+        minWidth: 80 
+    },
+    { 
+        field: "articulo", 
+        headerName: "Artículo", 
+        minWidth: 150, 
+        flex: 1 
+    },
     { 
       field: "descripcion", 
       headerName: "Descripción", 
       minWidth: 180, 
       flex: 1.5,
     },
-    { field: "telefonoCliente", headerName: "Teléfono", width: 100 },
+    { 
+        field: "telefonoCliente", 
+        headerName: "Teléfono", 
+        width: 120,
+        minWidth: 120 
+    },
     
-    { field: "cantidad", headerName: "Cant.", width: 70, align: "center", headerAlign: "center"},
+    { 
+        field: "cantidad", 
+        headerName: "Cant.", 
+        width: 70, 
+        align: "center", 
+        headerAlign: "center",
+        minWidth: 70
+    },
     {
       field: "monto",
       headerName: "Monto",
       width: 100,
-      align: "right",
-      headerAlign: "right",
+      minWidth: 100,
+      align: "center", // Centrado como pediste
+      headerAlign: "center",
       valueFormatter: (p) => fmtCurrency(p as number),
     },
     {
       field: "cobrado",
       headerName: "Cobrado",
       width: 100,
+      minWidth: 100,
       align: "right",
       headerAlign: "right",
       valueFormatter: (p) => fmtCurrency(p as number),
@@ -719,6 +794,7 @@ export default function DashboardPage() {
       field: "puntosGenerados",
       headerName: "Cashback",
       width: 90,
+      minWidth: 90,
       align: "center",
       headerAlign: "center",
       valueFormatter: (p) => Number(p as number).toFixed(2),
@@ -726,7 +802,8 @@ export default function DashboardPage() {
     {
       field: "creadoFecha",
       headerName: "Fecha",
-      width: 150,
+      width: 160,
+      minWidth: 160,
       align: "center",
       headerAlign: "center",
       valueFormatter: (p) => fmtDate(p as string),
@@ -735,13 +812,15 @@ export default function DashboardPage() {
       field: "esCustom",
       headerName: "Esp.",
       width: 60,
+      minWidth: 60,
       align: "center",
       headerAlign: "center",
       sortable: true,
       renderCell: (p) =>
         isCustom(p.row.esCustom) ? (
-          <MuiTooltip title="Producto personalizado" arrow>
-            <AutoFixHighIcon sx={{ color: "#a78bfa", fontSize: 20 }} />
+          // CAMBIO 2: Icono cambiado aquí
+          <MuiTooltip title="Promoción personalizada" arrow>
+            <LocalOfferIcon sx={{ color: "#f59e0b", fontSize: 20 }} />
           </MuiTooltip>
         ) : null,
     },
@@ -749,14 +828,13 @@ export default function DashboardPage() {
       field: "editar",
       headerName: "Editar",
       width: 70,
+      minWidth: 70,
       sortable: false,
       filterable: false,
       align: "center",
       headerAlign: "center",
       renderCell: (p) => {
         const custom = isCustom(p.row.esCustom);
-        
-        // Si es custom, mostramos un icono deshabilitado
         if (custom) {
             return (
                 <MuiTooltip title="No editable (promoción)" arrow>
@@ -768,7 +846,6 @@ export default function DashboardPage() {
                 </MuiTooltip>
             );
         }
-
         return (
           <MuiTooltip title="Editar venta" arrow>
             <IconButton
@@ -787,6 +864,7 @@ export default function DashboardPage() {
       field: "eliminar",
       headerName: "Borrar",
       width: 70,
+      minWidth: 70,
       sortable: false,
       filterable: false,
       align: "center",
@@ -901,24 +979,20 @@ export default function DashboardPage() {
             {/* 'auto' hace que ocupe solo el espacio necesario, no más */}
             <Grid size={{ xs: 12, md: 'auto' }} sx={{ minWidth: 'fit-content' }}>
               <Stack direction="row" spacing={1.5} sx={{ height: '56px', alignItems: 'stretch' }}>
+                {/* BOTÓN FILTRAR ACTUALIZADO */}
                 <Button
                   variant="contained"
-                  onClick={() => setFilterToken((x) => x + 1)}
+                  onClick={handleFilter}
                   disabled={loading || loadingCustom}
                   // Quitamos fullWidth, ajustamos padding y minWidth
                   sx={{ borderRadius: 1.5, px: 3, minWidth: 120, fontSize: '1rem' }}
                 >
                   {loading || loadingCustom ? <CircularProgress size={24} color="inherit" /> : "Filtrar"}
                 </Button>
+                {/* BOTÓN LIMPIAR ACTUALIZADO */}
                 <Button
                   variant="outlined"
-                  onClick={() => {
-                    const d = dayjs();
-                    setDesde(d.startOf("day"));
-                    setHasta(d.endOf("day"));
-                    setFilterToken((x) => x + 1);
-                    if(isSuperAdmin) setNegocioId("");
-                  }}
+                  onClick={handleClear}
                   sx={{ borderRadius: 1.5, px: 3, minWidth: 100 }}
                 >
                   Limpiar
@@ -976,38 +1050,44 @@ export default function DashboardPage() {
                     <Paper sx={{ p: 2, flex: 1, borderRadius: 2, border: '1px solid #e2e8f0' }}>
                         <Typography fontWeight={700} mb={2} color="primary">Ventas por día</Typography>
                         <Typography variant="caption" color="text.secondary" mb={2} display="block">Resultado por fecha (máx. 7 días)</Typography>
-                        <Box sx={{ height: 250 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={ventasPorDia}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="dia" tickFormatter={fmtDateAxis} tick={{fontSize: 10}} />
-                                    <YAxis tick={{fontSize: 10}} />
-                                    <Tooltip labelFormatter={(v) => fmtDateAxis(String(v))} />
-                                    <Bar dataKey="ventas" radius={[4, 4, 0, 0]}>
-                                        {ventasPorDia.map((r, i) => <Cell key={i} fill={r.color} />)}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                        {/* CAMBIO 1: Scroll horizontal en gráficas */}
+                        <Box sx={{ height: 250, overflowX: "auto", overflowY: "hidden" }}>
+                            <Box sx={{ minWidth: isMobile ? 600 : "100%", height: "100%" }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={ventasPorDia}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="dia" tickFormatter={fmtDateAxis} tick={{fontSize: 10}} />
+                                        <YAxis tick={{fontSize: 10}} />
+                                        <Tooltip labelFormatter={(v) => fmtDateAxis(String(v))} />
+                                        <Bar dataKey="ventas" radius={[4, 4, 0, 0]}>
+                                            {ventasPorDia.map((r, i) => <Cell key={i} fill={r.color} />)}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </Box>
                         </Box>
                     </Paper>
                     <Paper sx={{ p: 2, flex: 1, borderRadius: 2, border: '1px solid #e2e8f0' }}>
                           <Typography fontWeight={700} mb={2} color="primary">Artículos más vendidos</Typography>
                           <Typography variant="caption" color="text.secondary" mb={2} display="block">Top 10 por cantidad</Typography>
-                          <Box sx={{ height: 250 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={topArticulos}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="name" tick={{fontSize: 10}} interval={0} angle={-15} textAnchor="end" height={60} />
-                                    <YAxis tick={{fontSize: 10}} allowDecimals={false} />
-                                    <Tooltip 
-                                        formatter={(value) => [value, "Cantidad"]} 
-                                        labelStyle={{ color: "#333", fontWeight: "bold" }} 
-                                    />
-                                    <Bar dataKey="qty" radius={[4, 4, 0, 0]}>
-                                        {topArticulos.map((r, i) => <Cell key={i} fill={r.color} />)}
-                                    </Bar>
-                                </BarChart>
-                            </ResponsiveContainer>
+                          {/* CAMBIO 1: Scroll horizontal en gráficas */}
+                          <Box sx={{ height: 250, overflowX: "auto", overflowY: "hidden" }}>
+                            <Box sx={{ minWidth: isMobile ? 600 : "100%", height: "100%" }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={topArticulos}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="name" tick={{fontSize: 10}} interval={0} angle={-15} textAnchor="end" height={60} />
+                                        <YAxis tick={{fontSize: 10}} allowDecimals={false} />
+                                        <Tooltip 
+                                            formatter={(value) => [value, "Cantidad"]} 
+                                            labelStyle={{ color: "#333", fontWeight: "bold" }} 
+                                        />
+                                        <Bar dataKey="qty" radius={[4, 4, 0, 0]}>
+                                            {topArticulos.map((r, i) => <Cell key={i} fill={r.color} />)}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </Box>
                          </Box>
                     </Paper>
                     </>
@@ -1015,19 +1095,22 @@ export default function DashboardPage() {
                     <Paper sx={{ p: 2, width: '100%', borderRadius: 2, border: '1px solid #e2e8f0' }}>
                           <Typography fontWeight={700} mb={2} color="primary">Ventas de promociones personalizadas</Typography>
                           <Typography variant="caption" color="text.secondary" mb={2} display="block">Promociones personalizadas (máx. 7 días, Top 10)</Typography>
-                          <Box sx={{ height: 300 }}>
-                            <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={promoCombinedData}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="fecha" tickFormatter={fmtDateAxis} />
-                                    <YAxis />
-                                    <Tooltip labelFormatter={(v) => fmtDateAxis(String(v))}/>
-                                    <Legend />
-                                    {promoProductNames.map((name, i) => (
-                                        <Bar key={name} dataKey={name} stackId="a" fill={SOFT_COLORS[i % SOFT_COLORS.length]} />
-                                    ))}
-                                </BarChart>
-                            </ResponsiveContainer>
+                          {/* CAMBIO 1: Scroll horizontal en gráficas */}
+                          <Box sx={{ height: 300, overflowX: "auto", overflowY: "hidden" }}>
+                             <Box sx={{ minWidth: isMobile ? 600 : "100%", height: "100%" }}>
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={promoCombinedData}>
+                                        <CartesianGrid strokeDasharray="3 3" />
+                                        <XAxis dataKey="fecha" tickFormatter={fmtDateAxis} />
+                                        <YAxis />
+                                        <Tooltip labelFormatter={(v) => fmtDateAxis(String(v))}/>
+                                        <Legend />
+                                        {promoProductNames.map((name, i) => (
+                                            <Bar key={name} dataKey={name} stackId="a" fill={SOFT_COLORS[i % SOFT_COLORS.length]} />
+                                        ))}
+                                    </BarChart>
+                                </ResponsiveContainer>
+                             </Box>
                          </Box>
                     </Paper>
                 )}
@@ -1037,9 +1120,25 @@ export default function DashboardPage() {
 
         {/* Tabla de Ventas */}
         <Paper sx={{ p: 2.5, borderRadius: 3, width: '100%', overflow: 'hidden' }}>
-          <Typography variant="h6" fontWeight={800} color="primary" sx={{ mb: 2 }}>
-            Ventas recientes
-          </Typography>
+          
+          {/* 4. Header del Grid alineado con Refresh */}
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+            <Typography variant="h6" fontWeight={800} color="primary">
+                Ventas recientes
+            </Typography>
+            <Stack direction="row" alignItems="center" spacing={1}>
+                {/* Botón Exportar arriba */}
+                <Button variant="outlined" startIcon={<DownloadIcon />} onClick={onExportGridXlsx} size="small">
+                    Exportar
+                </Button>
+                <MuiTooltip title="Refrescar">
+                    <IconButton onClick={refreshGridRowsOnly} color="primary" sx={{ p: 1 }}>
+                        <RefreshIcon />
+                    </IconButton>
+                </MuiTooltip>
+            </Stack>
+          </Stack>
+
           <Divider sx={{ mb: 2 }} />
 
           <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ mb: 2 }}>
@@ -1050,14 +1149,6 @@ export default function DashboardPage() {
               size="small"
               fullWidth
             />
-            <Stack direction="row" spacing={1}>
-                <Button variant="outlined" startIcon={<DownloadIcon />} onClick={onExportGridXlsx}>
-                    Exportar
-                </Button>
-                <IconButton onClick={refreshGridRowsOnly} color="primary">
-                    <RefreshIcon />
-                </IconButton>
-            </Stack>
           </Stack>
 
           <Box sx={{ height: dynamicHeight, width: "100%", overflowX: 'auto' }}>
@@ -1070,26 +1161,38 @@ export default function DashboardPage() {
               pageSizeOptions={[5, 10, 20, 50]}
               loading={loadingRows || (loading && !!data)}
               disableRowSelectionOnClick
-              initialState={{
-                columns: {
-                  columnVisibilityModel: {
-                    descripcion: !isMobile,
-                    telefonoCliente: !isMobile,
-                    creadoFecha: !isMobile,
-                  },
-                },
-              }}
+              // 3. Eliminar columnVisibilityModel para forzar scroll horizontal en móvil
+              initialState={{}}
+              
+              // Zebra Striping Class Logic
+              getRowClassName={(params) =>
+                params.indexRelativeToCurrentPage % 2 === 0 ? "even" : "odd"
+              }
               sx={{
-                minWidth: isMobile ? 800 : '100%',
-                "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
-                // Zebra striping styles
-                "& .MuiDataGrid-row:nth-of-type(odd)": {
+                // 3. Force minimum width for horizontal scroll on mobile
+                minWidth: 1000, 
+                // 2. Add Border
+                border: "1px solid #e0e0e0", 
+                borderRadius: 2,
+                
+                "& .MuiDataGrid-columnHeaders": { 
+                    backgroundColor: "#f8fafc", 
+                    fontWeight: 700,
+                    borderBottom: "1px solid #e0e0e0" 
+                },
+                "& .MuiDataGrid-cell": {
+                    borderBottom: "1px solid #f0f0f0"
+                },
+                // Zebra styles
+                "& .MuiDataGrid-row.odd": {
                   backgroundColor: "#ffffff",
                 },
-                "& .MuiDataGrid-row:nth-of-type(even)": {
-                  backgroundColor: "#f0f7ff", // Light blue
+                "& .MuiDataGrid-row.even": {
+                  backgroundColor: "#f0f7ff", // Azul muy claro
                 },
-                border: "none", // Optional clean look
+                "& .MuiDataGrid-row:hover": {
+                  backgroundColor: "#e0f2fe",
+                },
               }}
             />
           </Box>
@@ -1122,26 +1225,22 @@ export default function DashboardPage() {
           </DialogActions>
       </Dialog>
 
-{/* TOAST PERSONALIZADO */}
       <Snackbar
         open={toastOpen}
         autoHideDuration={3000}
         onClose={() => setToastOpen(false)}
-        // Posición: Arriba a la Derecha
         anchorOrigin={{ vertical: "top", horizontal: "right" }}
       >
         <Alert
           onClose={() => setToastOpen(false)}
           severity={toastSeverity}
-          // variant="filled" es la clave para que se vea con color sólido
           variant="filled" 
           sx={{
             width: "100%",
-            boxShadow: 3, // Sombra para que resalte
+            boxShadow: 3,
             fontSize: '0.95rem',
-            // Forzamos el color verde específico si es success
             ...(toastSeverity === 'success' && {
-                bgcolor: '#2e7d32', // Verde Material Design
+                bgcolor: '#2e7d32',
                 color: '#fff'
             })
           }}
