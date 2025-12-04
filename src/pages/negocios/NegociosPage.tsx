@@ -194,7 +194,7 @@ export default function NegociosPage() {
     {
       field: "nombre",
       headerName: "Nombre",
-      minWidth: 150, // Ancho mínimo para que no se aplaste
+      minWidth: 150,
       flex: 1,
       renderCell: (p) => (
         <Stack direction="row" alignItems="center" spacing={1} sx={{ height: '100%' }}>
@@ -204,7 +204,6 @@ export default function NegociosPage() {
       ),
     },
     { field: "categoria", headerName: "Categoría", minWidth: 120, flex: 0.8 },
-    // Estas columnas desaparecerán en móvil automáticamente
     { field: "facebook", headerName: "Facebook", minWidth: 150, flex: 1 },
     { field: "instagram", headerName: "Instagram", minWidth: 150, flex: 1 },
     { field: "sitio", headerName: "Sitio web", minWidth: 150, flex: 1 },
@@ -349,7 +348,7 @@ export default function NegociosPage() {
             </IconButton>
           </MuiTooltip>
         </Stack>
-
+        <Divider sx={{ mb: 2 }} />
         <TextField
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -377,11 +376,9 @@ export default function NegociosPage() {
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
             pageSizeOptions={[5, 10, 20]}
-            // Lógica Responsiva para Columnas
             initialState={{
               columns: {
                 columnVisibilityModel: {
-                  // Ocultar en móvil por defecto para limpiar la vista
                   facebook: !isMobile,
                   instagram: !isMobile,
                   sitio: !isMobile,
@@ -389,15 +386,49 @@ export default function NegociosPage() {
                 },
               },
             }}
+            // Lógica para clases "odd" (impar) y "even" (par)
+            getRowClassName={(params) =>
+              params.indexRelativeToCurrentPage % 2 === 0 ? "even" : "odd"
+            }
             sx={{
-              minWidth: isMobile ? 600 : '100%', // Fuerza scroll horizontal si es muy angosto
-              border: "none",
-              "& .MuiDataGrid-columnHeaders": { backgroundColor: "#f8fafc", fontWeight: 700 },
-              "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(21, 101, 192, 0.04)" },
+              minWidth: isMobile ? 600 : '100%',
+              // 1. Agregamos el borde faltante
+              border: "1px solid #e0e0e0",
+              borderRadius: 2,
+              // 2. Estilos para Header y Celdas
+              "& .MuiDataGrid-columnHeaders": { 
+                backgroundColor: "#f8fafc", 
+                fontWeight: 700,
+                borderBottom: "1px solid #e0e0e0" 
+              },
+              "& .MuiDataGrid-cell": {
+                borderBottom: "1px solid #f0f0f0"
+              },
+              // 3. Estilos Cebra (Zebra Striping)
+              "& .MuiDataGrid-row.odd": {
+                backgroundColor: "#ffffff",
+              },
+              "& .MuiDataGrid-row.even": {
+                backgroundColor: "#f0f7ff", // Azul muy claro
+              },
+              "& .MuiDataGrid-row:hover": {
+                backgroundColor: "#e0f2fe", // Azul un poco más fuerte al hover
+              },
             }}
           />
         </Box>
       </Paper>
+
+      <Snackbar
+        open={toastOpen}
+        autoHideDuration={3000}
+        onClose={handleToastClose}
+        anchorOrigin={{ vertical: "top", horizontal: "right" }}
+      >
+        <Alert onClose={handleToastClose} severity={toastSeverity} sx={{ width: "100%" }}>
+          {toastMsg}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

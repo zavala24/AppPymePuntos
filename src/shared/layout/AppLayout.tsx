@@ -75,6 +75,7 @@ function initials(text: string) {
 
 export default function AppLayout() {
   const theme = useTheme();
+  // Detectar si es escritorio (md para arriba)
   const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
 
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -93,6 +94,7 @@ export default function AppLayout() {
 
   useEffect(() => {
     setOpenConfig(pathname.startsWith("/configuracion"));
+    // Si cambiamos a pantalla pequeña, cerramos el drawer móvil por defecto
     if (!isDesktop) setMobileOpen(false);
   }, [pathname, isDesktop]);
 
@@ -161,19 +163,27 @@ export default function AppLayout() {
 
   const drawerContent = (
     <>
-      {/* HEADER SIDEBAR: Logo sobre fondo blanco para resaltar */}
-      <Toolbar sx={{ display: "flex", alignItems: "center", px: 2, py: 3, justifyContent: 'center' }}>
+      {/* HEADER SIDEBAR: Ajustado para verse bien en móvil y escritorio */}
+      <Toolbar 
+        sx={{ 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: 'center',
+          py: 3,
+          px: 2,
+          minHeight: '80px !important' // Asegura altura en móviles
+        }}
+      >
         <Box
           sx={{
             bgcolor: "white",
             borderRadius: "12px",
-            py: 1,
-            px: 1,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            width: "95%",
-            boxShadow: "0 4px 6px rgba(0,0,0,0.1)"
+            width: "100%",
+            py: 1.5,
+            boxShadow: "0 4px 8px rgba(0,0,0,0.15)"
           }}
         >
           <Box
@@ -181,11 +191,10 @@ export default function AppLayout() {
             src={Logo}
             alt="PyMe Fiel"
             sx={{ 
-              height: 65,
+              height: 50,
               width: "auto", 
               maxWidth: "100%",
               objectFit: "contain",
-              // NOTA: Quitamos el filtro invertido para que se vea el azul original del logo
             }} 
           />
         </Box>
@@ -268,12 +277,16 @@ export default function AppLayout() {
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#f1f5f9" }}>
       <CssBaseline />
       
-      {/* NAVBAR SUPERIOR (BLANCO CON TEXTO AZUL) */}
+      {/* NAVBAR SUPERIOR */}
       <AppBar
         position="fixed"
         elevation={0}
         sx={{
-          zIndex: (theme) => theme.zIndex.drawer + 1,
+          // -- AQUÍ ESTÁ EL ARREGLO CLAVE --
+          // En escritorio, AppBar va ENCIMA del Drawer (para efecto clipped)
+          // En móvil, AppBar va DEBAJO del Drawer (para que el menú lo tape completo)
+          zIndex: (theme) => isDesktop ? theme.zIndex.drawer + 1 : theme.zIndex.appBar,
+          
           transition: theme.transitions.create(["width", "margin"], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.leavingScreen,
@@ -286,13 +299,12 @@ export default function AppLayout() {
               duration: theme.transitions.duration.enteringScreen,
             }),
           }),
-          bgcolor: headerBg, // Blanco
-          color: brandBlue,  // Texto Azul
+          bgcolor: headerBg, 
+          color: brandBlue,  
           borderBottom: "1px solid #e2e8f0"
         }}
       >
         <Toolbar>
-          {/* Menú Hamburguesa en Azul */}
           <IconButton
             color="inherit"
             aria-label="open drawer"
@@ -317,7 +329,6 @@ export default function AppLayout() {
                 </Typography>
             </Box>
             <Tooltip title={displayName}>
-              {/* Avatar Azul con letra Blanca (para invertir contraste) */}
               <Avatar 
                 sx={{ 
                   bgcolor: brandBlue, 
@@ -338,6 +349,7 @@ export default function AppLayout() {
         component="nav"
         sx={{ width: { md: desktopOpen ? drawerWidth : 0 }, flexShrink: { md: 0 }, transition: 'width 0.3s' }}
       >
+        {/* Drawer Móvil (Temporary) */}
         <Drawer
           variant="temporary"
           open={!isDesktop && mobileOpen}
@@ -351,6 +363,7 @@ export default function AppLayout() {
           {drawerContent}
         </Drawer>
 
+        {/* Drawer Escritorio (Persistent) */}
         <Drawer
           variant="persistent"
           open={isDesktop && desktopOpen}
