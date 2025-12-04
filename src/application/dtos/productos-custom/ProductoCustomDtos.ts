@@ -12,6 +12,7 @@ export type ProductoCustomDto = {
   creadoFecha?: string | null;
   actualizadoPor?: string | null;
   actualizadoFecha?: string | null;
+  fechaCaducidad?: string | null;
 };
 
 export type UpsertProductoCustomRequest = {

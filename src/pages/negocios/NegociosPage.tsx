@@ -1,15 +1,15 @@
 import * as React from "react";
 import {
   Box, Paper, Typography, TextField, Button, Chip, Stack,
-  FormControlLabel, Switch, Divider, Snackbar, Alert, IconButton
+  FormControlLabel, Switch, Divider, Snackbar, Alert, IconButton,
+  useMediaQuery, useTheme
 } from "@mui/material";
-import { DataGrid, GridColDef, GridPaginationModel } from "@mui/x-data-grid";
+import { DataGrid, GridColDef, GridPaginationModel, GridToolbar } from "@mui/x-data-grid";
 import AddIcon from "@mui/icons-material/Add";
 import SaveIcon from "@mui/icons-material/Save";
 import CancelIcon from "@mui/icons-material/Close";
 import ShieldIcon from "@mui/icons-material/Security";
 import CheckIcon from "@mui/icons-material/CheckCircle";
-import CloseIcon from "@mui/icons-material/HighlightOff";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import MuiTooltip from "@mui/material/Tooltip";
 
@@ -33,6 +33,10 @@ interface NegocioRow {
 }
 
 export default function NegociosPage() {
+  const theme = useTheme();
+  // Detectar si es móvil para ajustar columnas
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+
   // ------- Form state -------
   const [form, setForm] = React.useState<Omit<NegocioRow, "id">>({
     nombre: "",
@@ -44,11 +48,8 @@ export default function NegociosPage() {
     activo: true,
   });
 
-  // Validación visual para nombre requerido
   const [nameTouched, setNameTouched] = React.useState(false);
   const nameError = nameTouched && form.nombre.trim().length === 0;
-
-  // id que estamos editando (null => modo crear)
   const [editingId, setEditingId] = React.useState<number | null>(null);
   const isEditing = editingId != null && editingId > 0;
 
@@ -136,7 +137,6 @@ export default function NegociosPage() {
   const [saving, setSaving] = React.useState(false);
 
   const onGuardar = async () => {
-    // fuerza validación visual
     setNameTouched(true);
     if (!form.nombre.trim()) {
       showToast("El nombre es obligatorio.", "error");
@@ -174,7 +174,6 @@ export default function NegociosPage() {
     }
   };
 
-  // Al hacer click en una fila, cargamos el form y entramos a modo edición
   const onRowClick = (params: any) => {
     const r = params.row as NegocioRow;
     setEditingId(r.id);
@@ -191,36 +190,29 @@ export default function NegociosPage() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
-  // ------- Columnas -------
   const columns: GridColDef<NegocioRow>[] = [
     {
       field: "nombre",
       headerName: "Nombre",
-      flex: 1.1,
-    renderCell: (p) => (
-      <Box
-        sx={{
-          display: "flex",
-          alignItems: "center",   
-          height: "100%",        
-        }}
-      >
-        <Stack direction="row" alignItems="center" spacing={1}>
-          <Typography fontWeight={600}>{p.value as string}</Typography>
+      minWidth: 150, // Ancho mínimo para que no se aplaste
+      flex: 1,
+      renderCell: (p) => (
+        <Stack direction="row" alignItems="center" spacing={1} sx={{ height: '100%' }}>
+          <Typography fontWeight={600} noWrap>{p.value as string}</Typography>
           {p.row.activo && <CheckIcon fontSize="small" color="success" />}
         </Stack>
-      </Box>
-    ),
+      ),
     },
-    { field: "categoria", headerName: "Categoría", flex: 0.9 },
-    { field: "facebook", headerName: "Facebook", flex: 1 },
-    { field: "instagram", headerName: "Instagram", flex: 1 },
-    { field: "sitio", headerName: "Sitio web", flex: 0.9 },
-    { field: "direccion", headerName: "Dirección", flex: 1.2 },
+    { field: "categoria", headerName: "Categoría", minWidth: 120, flex: 0.8 },
+    // Estas columnas desaparecerán en móvil automáticamente
+    { field: "facebook", headerName: "Facebook", minWidth: 150, flex: 1 },
+    { field: "instagram", headerName: "Instagram", minWidth: 150, flex: 1 },
+    { field: "sitio", headerName: "Sitio web", minWidth: 150, flex: 1 },
+    { field: "direccion", headerName: "Dirección", minWidth: 200, flex: 1.2 },
     {
       field: "activo",
       headerName: "Activo",
-      width: 110,
+      width: 90,
       align: "center",
       headerAlign: "center",
       renderCell: (p) =>
@@ -232,80 +224,86 @@ export default function NegociosPage() {
     },
   ];
 
-  // altura dinámica
   const dynamicHeight = Math.min(700, 120 + paginationModel.pageSize * 55);
 
   return (
-    <Box className="mx-auto w-full max-w-[1800px] px-4 md:px-6 py-4">
-      {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography variant="h4" color="primary">Negocios</Typography>
-        <Chip icon={<ShieldIcon />} label="Solo SUPER ADMIN" color="secondary" variant="outlined" />
+    <Box className="mx-auto w-full max-w-[1800px] px-2 md:px-6 py-4">
+      {/* Header Responsivo */}
+      <Stack 
+        direction={{ xs: 'column', sm: 'row' }} 
+        alignItems={{ xs: 'flex-start', sm: 'center' }} 
+        justifyContent="space-between" 
+        gap={1}
+        sx={{ mb: 2 }}
+      >
+        <Typography variant="h4" color="primary" sx={{ fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
+          Negocios
+        </Typography>
+        <Chip icon={<ShieldIcon />} label="Solo SUPER ADMIN" color="secondary" variant="outlined" size={isMobile ? "small" : "medium"} />
       </Stack>
 
       {/* Formulario */}
       <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, mb: 3 }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-          <Typography variant="h6" fontWeight={700} color="primary">
-            {isEditing ? "Editar negocio" : "Nuevo negocio"}
-          </Typography>
+        <Typography variant="h6" fontWeight={700} color="primary" sx={{ mb: 2 }}>
+          {isEditing ? "Editar negocio" : "Nuevo negocio"}
+        </Typography>
+
+        {/* Inputs en columna en móvil */}
+        <Stack direction="column" gap={2} sx={{ mb: 2 }}>
+          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
+            <TextField
+              fullWidth
+              required
+              label="Nombre"
+              value={form.nombre}
+              onChange={(e) => {
+                const v = e.target.value;
+                setForm((f) => ({ ...f, nombre: v }));
+                if (!nameTouched) setNameTouched(true);
+              }}
+              onBlur={() => setNameTouched(true)}
+              error={nameError}
+              helperText={nameError ? "El nombre es obligatorio" : " "}
+            />
+            <TextField
+              fullWidth
+              label="Facebook"
+              value={form.facebook}
+              onChange={(e) => setForm((f) => ({ ...f, facebook: e.target.value }))}
+            />
+          </Stack>
+
+          <Stack direction={{ xs: "column", md: "row" }} gap={2}>
+            <TextField
+              fullWidth
+              label="Instagram"
+              value={form.instagram}
+              onChange={(e) => setForm((f) => ({ ...f, instagram: e.target.value }))}
+            />
+            <TextField
+              fullWidth
+              label="Sitio web"
+              value={form.sitio}
+              onChange={(e) => setForm((f) => ({ ...f, sitio: e.target.value }))}
+            />
+          </Stack>
+
+          <TextField
+            fullWidth
+            label="Categoría"
+            value={form.categoria}
+            onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}
+          />
+
+          <TextField
+            fullWidth
+            multiline
+            minRows={3}
+            label="Dirección"
+            value={form.direccion}
+            onChange={(e) => setForm((f) => ({ ...f, direccion: e.target.value }))}
+          />
         </Stack>
-
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField
-            fullWidth
-            required
-            label="Nombre"
-            value={form.nombre}
-            onChange={(e) => {
-              const v = e.target.value;
-              setForm((f) => ({ ...f, nombre: v }));
-              if (!nameTouched) setNameTouched(true);
-            }}
-            onBlur={() => setNameTouched(true)}
-            error={nameError}
-            helperText={nameError ? "El nombre es obligatorio" : " "}
-          />
-          <TextField
-            fullWidth
-            label="Facebook"
-            value={form.facebook}
-            onChange={(e) => setForm((f) => ({ ...f, facebook: e.target.value }))}
-          />
-        </Stack>
-
-        <Stack direction={{ xs: "column", md: "row" }} gap={2} sx={{ mb: 2 }}>
-          <TextField
-            fullWidth
-            label="Instagram"
-            value={form.instagram}
-            onChange={(e) => setForm((f) => ({ ...f, instagram: e.target.value }))}
-          />
-          <TextField
-            fullWidth
-            label="Sitio web"
-            value={form.sitio}
-            onChange={(e) => setForm((f) => ({ ...f, sitio: e.target.value }))}
-          />
-        </Stack>
-
-        <TextField
-          fullWidth
-          label="Categoría"
-          value={form.categoria}
-          onChange={(e) => setForm((f) => ({ ...f, categoria: e.target.value }))}
-          sx={{ mb: 2 }}
-        />
-
-        <TextField
-          fullWidth
-          multiline
-          minRows={3}
-          label="Dirección"
-          value={form.direccion}
-          onChange={(e) => setForm((f) => ({ ...f, direccion: e.target.value }))}
-          sx={{ mb: 2 }}
-        />
 
         <FormControlLabel
           control={
@@ -315,6 +313,7 @@ export default function NegociosPage() {
             />
           }
           label="Activo"
+          sx={{ mb: 2 }}
         />
 
         <Stack direction="row" justifyContent="flex-end" gap={1}>
@@ -323,7 +322,7 @@ export default function NegociosPage() {
           </Button>
           {isEditing && (
             <Button startIcon={<CancelIcon />} variant="outlined" color="warning" onClick={onCancelarEdicion}>
-              Cancelar edición
+              Cancelar
             </Button>
           )}
           <Button
@@ -333,47 +332,39 @@ export default function NegociosPage() {
             onClick={onGuardar}
             disabled={saving}
           >
-            {saving ? (isEditing ? "Actualizando..." : "Guardando...") : (isEditing ? "Actualizar" : "Guardar")}
+            {saving ? "Guardando..." : (isEditing ? "Actualizar" : "Guardar")}
           </Button>
         </Stack>
       </Paper>
 
-      {/* Buscador + Grid */}
-      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 } }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+      {/* Grid */}
+      <Paper elevation={1} sx={{ p: { xs: 2, md: 2.5 }, width: '100%', overflow: 'hidden' }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
           <Typography variant="h6" fontWeight={700} color="primary">
-            Negocios dados de alta
+            Listado
           </Typography>
           <MuiTooltip title="Refrescar">
-            <IconButton
-              size="small"
-              onClick={() => loadPage()}
-              sx={{ color: "primary.main", "&:hover": { color: "primary.dark" } }}
-              aria-label="Refrescar"
-            >
+            <IconButton onClick={() => loadPage()} color="primary">
               <RefreshIcon />
             </IconButton>
           </MuiTooltip>
         </Stack>
 
-        <Divider sx={{ mb: 2 }} />
+        <TextField
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Buscar negocio..."
+          size="small"
+          fullWidth
+          sx={{
+            mb: 2,
+            maxWidth: { xs: "100%", md: 400 },
+            "& .MuiOutlinedInput-root": { borderRadius: 20 },
+          }}
+        />
 
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
-          <TextField
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar negocio..."
-            size="small"
-            fullWidth
-            sx={{
-              maxWidth: { xs: "100%", md: 720 },
-              "& .MuiOutlinedInput-root": { borderRadius: 20, height: 44 },
-              "& .MuiOutlinedInput-input": { lineHeight: "44px" },
-            }}
-          />
-        </Stack>
-
-        <Box sx={{ height: dynamicHeight, width: "100%" }}>
+        {/* Contenedor del Grid para Scroll Horizontal */}
+        <Box sx={{ height: dynamicHeight, width: "100%", overflowX: 'auto' }}>
           <DataGrid
             rows={rows}
             columns={columns}
@@ -385,31 +376,28 @@ export default function NegociosPage() {
             rowCount={rowCount}
             paginationModel={paginationModel}
             onPaginationModelChange={setPaginationModel}
-            pageSizeOptions={[5, 10, 20, 50]}
-            getRowClassName={(p) => (p.indexRelativeToCurrentPage % 2 === 0 ? "row-even" : "row-odd")}
+            pageSizeOptions={[5, 10, 20]}
+            // Lógica Responsiva para Columnas
+            initialState={{
+              columns: {
+                columnVisibilityModel: {
+                  // Ocultar en móvil por defecto para limpiar la vista
+                  facebook: !isMobile,
+                  instagram: !isMobile,
+                  sitio: !isMobile,
+                  direccion: !isMobile,
+                },
+              },
+            }}
             sx={{
-              borderRadius: 3,
-              "& .MuiDataGrid-columnHeaders": { backgroundColor: "action.hover", fontWeight: 700 },
-              "& .row-even": { backgroundColor: "#ffffff" },
-              "& .row-odd": { backgroundColor: "rgba(14,165,233,0.06)" },
-              "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(14,165,233,0.12) !important" },
-              "& .MuiDataGrid-cell:focus, & .MuiDataGrid-cell:focus-within": { outline: "none" },
+              minWidth: isMobile ? 600 : '100%', // Fuerza scroll horizontal si es muy angosto
+              border: "none",
+              "& .MuiDataGrid-columnHeaders": { backgroundColor: "#f8fafc", fontWeight: 700 },
+              "& .MuiDataGrid-row:hover": { backgroundColor: "rgba(21, 101, 192, 0.04)" },
             }}
           />
         </Box>
       </Paper>
-
-      {/* TOASTS */}
-      <Snackbar
-        open={toastOpen}
-        autoHideDuration={3500}
-        onClose={handleToastClose}
-        anchorOrigin={{ vertical: "top", horizontal: "right" }}
-      >
-        <Alert onClose={handleToastClose} severity={toastSeverity} variant="filled" sx={{ width: "100%" }}>
-          {toastMsg}
-        </Alert>
-      </Snackbar>
     </Box>
   );
 }

@@ -11,6 +11,7 @@ import {
   Alert,
   FormControlLabel,
   Switch,
+  useMediaQuery,
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
 import ShieldIcon from "@mui/icons-material/Security";
@@ -20,6 +21,7 @@ import { NegocioRepository } from "@/infrastructure/repositories/NegocioReposito
 import { NegocioService } from "@/application/services/NegocioService";
 import type { INegocioService } from "@/application/services/INegocioService";
 import { NegocioWithConfigDto } from "@/application/dtos/negocio/NegocioWithConfigDto";
+import theme from "@/app/theme";
 
 const negocioService: INegocioService = new NegocioService(new NegocioRepository());
 
@@ -59,6 +61,7 @@ type FormState = {
 };
 
 export default function MiNegocioPage() {
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const [loading, setLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [idNegocio, setIdNegocio] = React.useState<number | null>(null);
@@ -221,21 +224,17 @@ export default function MiNegocioPage() {
   // -------- UI --------
   return (
     <Box className="mx-auto w-full max-w-[1800px] px-4 md:px-6 py-4">
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
+      <Stack 
+        direction={{ xs: 'column', sm: 'row' }} 
+        alignItems={{ xs: 'flex-start', sm: 'center' }} 
+        justifyContent="space-between" 
+        gap={1}
         sx={{ mb: 2 }}
       >
-        <Typography variant="h4" color="primary">
-          Mi negocio
+        <Typography variant="h4" color="primary" sx={{ fontSize: { xs: '1.5rem', md: '2.125rem' } }}>
+          Mi Negocio
         </Typography>
-        <Chip
-          icon={<ShieldIcon />}
-          label="Solo ADMIN"
-          color="secondary"
-          variant="outlined"
-        />
+        <Chip icon={<ShieldIcon />} label="Solo ADMIN" color="secondary" variant="outlined" size={isMobile ? "small" : "medium"} />
       </Stack>
 
       {/* Información del negocio */}
